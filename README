@@ -1,0 +1,36 @@
+Pour tester, écrivez la commande suivante dans le dossier pour créer tous les éxecutables : make all
+
+Ensuite ./ui permet de lancer notre interface graphique.
+
+Dans notre interface graphque, cliquez sur main_page pour commencez la procédure.
+
+Vous pouvez uploadez votre image en cliquant sur le bouton en haut à gauche en dessous de Load image.
+
+Ensuite après avoir uploadé votre image, vous devez rogner votre image avec les 4 curseurs posisionnés autour de votre image.
+Pour rogner il faut le faire coté par coté et mettre des petites valeurs et appuyé plusieurs fois sur resize. Dès que un coté et rogné, il faut mettre le curseur à 0;
+
+Si vous n'avez pas besoin de rogner, il faut quand même appuyer sur le bouton resize avec les 4 curseur à 0;
+
+Ensuite, c'est le prétraitemnt. Le cmap permet de spécifier un angle de rotation pour la rotation manuelle. Si rien n'est écris cela appliquera alors la rotation automatique. Il affiche le l'image après avoir appliqué le filtre grayscale.
+
+Le bouton carving sert lui à découper l'image. Il affichera la détection de grille.
+
+Enfin le bouton solve permet de résoudre la grille. S'il n'y a aucun problème la grille s'affichera résolue avec les nouveaux chiffres en rouges et les anciens en noirs.
+
+Par contre si un problème est apparut, il est toujours possible de taper la grille manuellement dans le champ au dessus du bouton. Le format de la grille est comme ceux-ci : 
+53.  .7.  ...6..  195  ....98  ...  .6.8..  .6.  ..34..  8.3  ..17..  .2.  ..6.6.  ...  28....  419  ..5...  .8.  .79
+
+Pour cette grille : 53.  .7.  ...
+                    6..  195  ...
+                    .98  ...  .6.
+
+                    8..  .6.  ..3
+                    4..  8.3  ..1
+                    7..  .2.  ..6
+
+                    .6.  ...  28.
+                    ...  419  ..5
+                    ...  .8.  .79
+
+Il ne fayt pas non plus oublié d'appuyer sur le bouton juste au dessus du champ;
+Cela devarit afficher la grille résolue.

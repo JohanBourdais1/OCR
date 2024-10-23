@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "network.h": "c",
+        "sudoku.h": "c",
+        "sdl_image.h": "c",
+        "sdl.h": "c"
+    }
+}
