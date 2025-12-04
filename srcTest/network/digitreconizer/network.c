@@ -126,7 +126,7 @@ double* apply_step(network* net, int size, size_t nb_out, double* filter)
             }
         }
     }
-    reLU(nb_out, size * size, out);
+    reLU(nb_out, out_size * out_size, out);
     return maxPool(out, out_size, nb_out);
 }
 

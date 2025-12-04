@@ -104,9 +104,9 @@ void train(network *n, char *path)
                 for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= lr * dconv1_b[i];
                 for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= lr * dconv2_w[i];
                 for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= lr * dconv2_b[i];
-                for(size_t i=0;i<(size_t)HIDDEN_SIZE*MLP_SIZE;i++) n->input_weight[i/HIDDEN_SIZE][i%HIDDEN_SIZE] -= lr * ddense1_w[i];
+                for(size_t i=0;i<(size_t)HIDDEN_SIZE*MLP_SIZE;i++) n->input_weight[i/MLP_SIZE][i%MLP_SIZE] -= lr * ddense1_w[i];
                 for(size_t i=0;i<(size_t)HIDDEN_SIZE;i++) n->input_biais[i] -= lr * ddense1_b[i];
-                for(size_t i=0;i<(size_t)OUTPUT_SIZE*HIDDEN_SIZE;i++) n->hidden_weight[i/OUTPUT_SIZE][i%OUTPUT_SIZE] -= lr * ddense2_w[i];
+                for(size_t i=0;i<(size_t)OUTPUT_SIZE*HIDDEN_SIZE;i++) n->hidden_weight[i/HIDDEN_SIZE][i%HIDDEN_SIZE] -= lr * ddense2_w[i];
                 for(size_t i=0;i<(size_t)OUTPUT_SIZE;i++) n->hidden_biais[i] -= lr * ddense2_b[i];
 
                 free(dconv1_out);
