@@ -20,7 +20,7 @@ network* init_network()
         {
             for (size_t k = 0; k < (size_t)SIZE_FILTER; k++)
             {
-                net->filter_1[i * SIZE_FILTER * SIZE_FILTER + j * SIZE_FILTER + k] = (double)rand() / RAND_MAX * scale;
+                net->filter_1[i * SIZE_FILTER * SIZE_FILTER + j * SIZE_FILTER + k] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale;
             }
         }
     }
@@ -33,7 +33,7 @@ network* init_network()
             {
                 for (size_t k = 0; k < (size_t)SIZE_FILTER; k++)
                 {
-                    net->filter_2[i * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER + l * SIZE_FILTER * SIZE_FILTER + j * SIZE_FILTER + k]= (double)rand() / RAND_MAX * scale;
+                    net->filter_2[i * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER + l * SIZE_FILTER * SIZE_FILTER + j * SIZE_FILTER + k]= ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale;
                 }
             }
         }
@@ -65,11 +65,12 @@ network* init_network()
 
 void reLU(size_t nb_out, size_t input_size, double* out) 
 {
-    for (size_t i = 0; i < (size_t)nb_out; i++)
+    for (size_t i = 0; i < nb_out; i++)
     {
-        for (size_t j = 0; j < (size_t)input_size; j++)
+        for (size_t j = 0; j < input_size; j++)
         {
-            out[i * input_size + j] = fmax(0, out[i * input_size + j]);
+            double *p = &out[i * input_size + j];
+            *p = fmax(0.0, *p);
         }
     }
 }
@@ -97,37 +98,35 @@ double* maxPool(double* input, int size, size_t nb_out)
             }
         }
     }
-    free(input);
     return out;
 }
 
-double* apply_step(network* net, int size, size_t nb_out, double* filter)
+void apply_conv(network* net, int size, size_t nb_out,
+                double* filter, double* input, double* biais, double *conv_out)
 {
     int out_size = size - 2;
-    double* out = calloc(nb_out * out_size * out_size, sizeof(double));
+
     for (size_t i = 0; i < nb_out; i++)
     {
         double *kf = &(filter[i * SIZE_FILTER * SIZE_FILTER]);
-        double b = net->biais_1[i];
-        double* out_f = &(out[i * out_size * out_size]);
-        for (size_t l = 0; l < (size_t)out_size; l++)
+        double b = biais[i];
+        double* out_f = &(conv_out[i * out_size * out_size]);
+
+        for (int l = 0; l < out_size; l++)
         {
-            for (size_t j = 0; j < (size_t)out_size; j++)
+            for (int j = 0; j < out_size; j++)
             {
                 double s = b;
-                for (size_t k = 0; k < (size_t)SIZE_FILTER; k++)
-                {
-                    for (size_t h = 0; h < (size_t)SIZE_FILTER; h++)
-                    {
-                        s += kf[k * SIZE_FILTER + h] * net->inputValues[(j + k) * size + (l + h)];
-                    }
-                }
+                for (int k = 0; k < SIZE_FILTER; k++)
+                    for (int h = 0; h < SIZE_FILTER; h++)
+                        s += kf[k * SIZE_FILTER + h] * input[(l + k) * size + (j + h)];
+
                 out_f[l * out_size + j] = s;
             }
         }
     }
-    reLU(nb_out, out_size * out_size, out);
-    return maxPool(out, out_size, nb_out);
+
+    reLU(nb_out, out_size * out_size, conv_out);
 }
 
 void dense_reLU(network* net, double* input)
@@ -143,29 +142,25 @@ void dense_reLU(network* net, double* input)
     }
 }
 
-void dense_softmax(network* net)
-{
-    for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++) {
-        double s = net->hidden_biais[i];
-        for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++) {
-            s += net->hidden_weight[i][j] * net->hiddenValues[j];
-        }
-        net->outputValues[i] = s;
+void dense_softmax(network *net) {
+    for (int i = 0; i < OUTPUT_SIZE; ++i) {
+        double v = net->outputValues[i];
+        if (isnan(v) || isinf(v)) net->outputValues[i] = 0.0;
     }
 
     double max = net->outputValues[0];
-    for (size_t i = 1; i < (size_t)OUTPUT_SIZE; i++)
-    {
-        if(net->outputValues[i] > max) max = net->outputValues[i];
-    }
-    
-    double sum = 0;
-    for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++) {
-        net->outputValues[i] = expf(net->outputValues[i] - max);
+    for (int i = 1; i < OUTPUT_SIZE; ++i) if (net->outputValues[i] > max) max = net->outputValues[i];
+
+    double sum = 0.0;
+    for (int i = 0; i < OUTPUT_SIZE; ++i) {
+        double x = net->outputValues[i] - max;
+        if (x > 700.0) x = 700.0;
+        if (x < -700.0) x = -700.0;
+        net->outputValues[i] = exp(x);
         sum += net->outputValues[i];
     }
-    double inv = 1 / sum;
-    for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++) net->outputValues[i] *= inv;
+    if (sum < 1e-12) sum = 1e-12;
+    for (int i = 0; i < OUTPUT_SIZE; ++i) net->outputValues[i] /= sum;
 }
 
 void relu_backward_inplace(const double *out_forward, double *grad, int n){
@@ -370,6 +365,7 @@ void print_result(network *net)
     for (size_t i = 0; i < 10; i++) {
         printf("%ld : %f\n", i, net->outputValues[i]);
     }
+    printf("\n");
 }
 /*
 void save_network(char* path,network* net)

@@ -40,8 +40,9 @@ network* init_network();
 
 void reLU(size_t nb_out, size_t input_size, double* out);
 
-double* apply_step(network* net, int size, size_t nb_out, double* filter);
-
+void apply_conv(network* net, int size, size_t nb_out,
+                double* filter, double* input, double* biais, double *conv_out);
+                
 double* maxPool(double* input, int size, size_t nb_out);
 
 void dense_reLU(network* net, double* input);
