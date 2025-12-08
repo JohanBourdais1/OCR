@@ -14,11 +14,11 @@
 
 #define INPUT_SIZE 784
 #define SIZE 28
-#define NB_FILTER_1 8
-#define NB_FILTER_2 16
+#define NB_FILTER_1 16  // Doubler de 8 à 16
+#define NB_FILTER_2 32  // Doubler de 16 à 32
 #define SIZE_FILTER 3
-#define MLP_SIZE 400
-#define HIDDEN_SIZE 128
+#define MLP_SIZE 800    // Adapter car 32 filtres × 5×5 = 800
+#define HIDDEN_SIZE 256  // Augmenter de 128 à 256 pour plus de capacité
 #define OUTPUT_SIZE 10
 
 typedef struct network
@@ -31,9 +31,9 @@ typedef struct network
     double hiddenValues[HIDDEN_SIZE];
     double outputValues[OUTPUT_SIZE];
     double input_biais[HIDDEN_SIZE];
-    double input_weight[HIDDEN_SIZE * MLP_SIZE];  // Stocké linéairement
+    double input_weight[HIDDEN_SIZE * MLP_SIZE];
     double hidden_biais[OUTPUT_SIZE];
-    double hidden_weight[OUTPUT_SIZE * HIDDEN_SIZE];  // Stocké linéairement
+    double hidden_weight[OUTPUT_SIZE * HIDDEN_SIZE];
 } network;
 
 network* init_network();

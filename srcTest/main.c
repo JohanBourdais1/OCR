@@ -32,10 +32,125 @@ bool check_and_print_layer(const char *name, double *arr, size_t n) {
     return (nancount > 0 || infcount > 0 || fabs(maxv) > 1e6);
 }
 
+void test_on10(network *n)
+{
+    for (int i = 0; i < 10; i++)
+    {
+        char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+        snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/%d.png", i);
+        printf("%s\n", full_name);
+        n->inputValues = create_Input(full_name);
+        double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
+        double *conv2_out = calloc(NB_FILTER_2 * (SIZE - 2) / 2 * (SIZE - 2) / 2, sizeof(double));;
+        apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+        double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+        apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+        double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+        dense_reLU(n, output_filter_2);
+        
+        dense_logits(n);
+        dense_softmax(n);
+        print_result(n);
+        free(n->inputValues);
+        free(output_filter_2);
+        free(full_name);
+        free(output_filter_1);
+        free(conv2_out);
+        free(conv1_out);
+    }
+}
+
+int Test(network *n, char *path, int digit)
+{
+    DIR* directory = opendir(path);
+    if (directory == NULL) {
+        fprintf(stderr, "Can't open %s\n", path);
+        return -1;
+    }
+
+    struct dirent* entry = NULL;
+    int res = 0;
+        while ((entry = readdir(directory)) != NULL) {
+            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
+
+            if (entry->d_type == DT_DIR) {
+                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                    int result = Test(n, full_name, entry->d_name[0] - '0');
+                    switch (entry->d_name[0] - '0')
+                    {
+                        case 0:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 980);
+                            break;
+                        case 1:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1135);
+                            break;
+                        case 2:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1032);
+                            break;
+                        case 3:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1010);
+                            break;
+                        case 4:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 982);
+                            break;
+                        case 5:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 892);
+                            break;
+                        case 6:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 958);
+                            break;
+                        case 7:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1028);
+                            break;
+                        case 8:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 974);
+                            break;
+                        case 9:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1009);
+                            break;
+                    }
+                    
+                }
+                free(full_name);
+            } else {
+                if (!is_image_file(entry->d_name)) {
+                    free(full_name);
+                    continue;
+                }
+                n->inputValues = create_Input(full_name);
+                double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
+                double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
+                apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+                double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+                apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+                double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+                dense_reLU(n, output_filter_2);
+                dense_logits(n);
+                dense_softmax(n);
+                int pred = 0;
+                for(int i=1;i<OUTPUT_SIZE;i++) 
+                {
+                    if(n->outputValues[i] > n->outputValues[pred]) pred = i;
+                }
+                if (digit == pred)
+                    res++;
+                free(output_filter_2);
+                free(full_name);
+                free(output_filter_1);
+                free(conv2_out);
+                free(conv1_out);
+                free(n->inputValues);
+            }
+        }
+        closedir(directory);
+    return res;
+}
+
 void train(network *n, char *path)
 {
-    double lr = 0.001f;
-    int max_iterations = 60000;  // Augmenter pour plus d'apprentissage
+    double lr = 0.0007f;
+    int max_iterations = 60000;
     DIR* directory = opendir(path);
     if (directory == NULL) {
         fprintf(stderr, "Can't open %s\n", path);
@@ -87,25 +202,7 @@ void train(network *n, char *path)
 
                 dense_reLU(n, output_filter_2);
                 
-                // Diagnostic: vérifier les hidden values
-                double hidden_sum = 0, hidden_max = -INFINITY, hidden_min = INFINITY;
-                for (int k = 0; k < HIDDEN_SIZE; k++) {
-                    hidden_sum += n->hiddenValues[k];
-                    if (n->hiddenValues[k] > hidden_max) hidden_max = n->hiddenValues[k];
-                    if (n->hiddenValues[k] < hidden_min) hidden_min = n->hiddenValues[k];
-                }
-                printf("  hidden: min=%g max=%g mean=%g\n", hidden_min, hidden_max, hidden_sum / HIDDEN_SIZE);
-                
                 dense_logits(n);
-                
-                // Diagnostic: vérifier les logits
-                double logit_sum = 0, logit_max = -INFINITY, logit_min = INFINITY;
-                for (int k = 0; k < OUTPUT_SIZE; k++) {
-                    logit_sum += n->outputValues[k];
-                    if (n->outputValues[k] > logit_max) logit_max = n->outputValues[k];
-                    if (n->outputValues[k] < logit_min) logit_min = n->outputValues[k];
-                }
-                printf("  logits: min=%g max=%g mean=%g\n", logit_min, logit_max, logit_sum / OUTPUT_SIZE);
                 
                 dense_softmax(n);
                 char *tmp = strrchr(full_name, '/');
@@ -154,12 +251,10 @@ void train(network *n, char *path)
                 double *din = calloc((size_t)1 * SIZE * SIZE, sizeof(double));
                 conv2d_valid_backward(n->inputValues, SIZE, SIZE, 1, dconv1_out, 26, 26, NB_FILTER_1, n->filter_1, SIZE_FILTER, dconv1_w, dconv1_b, din);
 
-                // Learning rate decay: réduire le LR après 30000 itérations
                 double current_lr = lr;
-                if (e > 30000) current_lr = lr * 0.5;  // Réduire de moitié après 30k
-                if (e > 40000) current_lr = lr * 0.2;  // Réduire encore après 40k
-                
-                // Mise à jour des poids
+                if (e > 30000) current_lr = lr * 0.5;
+                if (e > 40000) current_lr = lr * 0.2;
+
                 for(size_t i=0;i<(size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_1[i] -= current_lr * dconv1_w[i];
                 for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= current_lr * dconv1_b[i];
                 for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= current_lr * dconv2_w[i];
@@ -179,18 +274,6 @@ void train(network *n, char *path)
                 free(output_filter_2);
                 free(n->inputValues);
                 free(full_name);
-                
-                // Diagnostic: afficher les normes des gradients
-                if (e % 5 == 0 || e < 3) {
-                    double gn2w = 0, gn1w = 0, gn_conv2 = 0, gn_conv1 = 0;
-                    for (size_t i = 0; i < (size_t)OUTPUT_SIZE * HIDDEN_SIZE; i++) gn2w += ddense2_w[i] * ddense2_w[i];
-                    for (size_t i = 0; i < (size_t)HIDDEN_SIZE * MLP_SIZE; i++) gn1w += ddense1_w[i] * ddense1_w[i];
-                    for (size_t i = 0; i < (size_t)NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER; i++) gn_conv2 += dconv2_w[i] * dconv2_w[i];
-                    for (size_t i = 0; i < (size_t)NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER; i++) gn_conv1 += dconv1_w[i] * dconv1_w[i];
-                    printf("  GradNorms: dense2_w=%g dense1_w=%g conv2_w=%g conv1_w=%g\n", 
-                           sqrt(gn2w), sqrt(gn1w), sqrt(gn_conv2), sqrt(gn_conv1));
-                }
-                
                 free(dlogits);
                 free(conv2_out);
                 free(conv1_out);
@@ -206,37 +289,6 @@ void train(network *n, char *path)
         free(ddense2_b);
         free(ddense2_w);
         closedir(directory);
-    
-    // Sauvegarder le réseau entraîné
-    printf("\n=== Saving trained network ===\n");
-    save_network("network/digitreconizer/network_trained.dat", n);
-
-    printf("\n=== Testing on sample images ===\n");
-    for (int i = 0; i < 10; i++)
-    {
-        char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
-        snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/%d.png", i);
-        printf("%s\n", full_name);
-        n->inputValues = create_Input(full_name);
-        double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
-        double *conv2_out = calloc(NB_FILTER_2 * (SIZE - 2) / 2 * (SIZE - 2) / 2, sizeof(double));;
-        apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
-        double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
-        apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
-        double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
-        dense_reLU(n, output_filter_2);
-        
-        dense_logits(n);
-        dense_softmax(n);
-        print_result(n);
-        free(n->inputValues);
-        free(output_filter_2);
-        free(full_name);
-        free(output_filter_1);
-        free(conv2_out);
-        free(conv1_out);
-    }
-
 }
 /*
 
@@ -396,39 +448,28 @@ int main(int argc, char *argv[])
 {
     network* n = init_network();
     
-    // Vérifier si on veut charger un réseau existant
     if (argc > 1 && strcmp(argv[1], "--load") == 0) {
         printf("Loading existing network...\n");
         load_network("network/digitreconizer/network_trained.dat", n);
         
-        // Tester directement
         printf("\n=== Testing on sample images ===\n");
-        for (int i = 0; i < 10; i++)
-        {
-            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
-            snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/%d.png", i);
-            printf("%s\n", full_name);
-            n->inputValues = create_Input(full_name);
-            double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
-            double *conv2_out = calloc(NB_FILTER_2 * (SIZE - 2) / 2 * (SIZE - 2) / 2, sizeof(double));
-            apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
-            double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
-            apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
-            double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
-            dense_reLU(n, output_filter_2);
-            dense_logits(n);
-            dense_softmax(n);
-            print_result(n);
-            free(n->inputValues);
-            free(output_filter_2);
-            free(full_name);
-            free(output_filter_1);
-            free(conv2_out);
-            free(conv1_out);
-        }
-    } else {
+        Test(n, "network/digitreconizer/data/mnist_png/test", 0);
+        test_on10(n);
+    } else if (argc > 1 && strcmp(argv[1], "--save") == 0) {
         printf("Starting fresh training...\n");
         train(n, "network/digitreconizer/data/mnist_png/train");
+        printf("\n=== Saving trained network ===\n");
+        save_network("network/digitreconizer/network_trained.dat", n);
+        printf("\n=== Testing on sample images ===\n");
+        Test(n, "network/digitreconizer/data/mnist_png/test", 0);
+        test_on10(n);
+    }
+    else {
+        printf("Starting fresh training...\n");
+        train(n, "network/digitreconizer/data/mnist_png/train");
+        printf("\n=== Testing on sample images ===\n");
+        Test(n, "network/digitreconizer/data/mnist_png/test", 0);
+        test_on10(n);
     }
     
     free_Network(n);

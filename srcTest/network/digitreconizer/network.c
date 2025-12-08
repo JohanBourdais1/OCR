@@ -389,7 +389,6 @@ void invert_surface(SDL_Surface* surface)
     SDL_UnlockSurface(surface);
 }
 
-// Invert the colors of a pixel
 Uint32 invert_pixel(Uint32 pixel_color, SDL_PixelFormat* format)
 {
     Uint8 r, g, b;
@@ -414,7 +413,6 @@ void save_network(char* path, network* net)
         exit(1);
     }
     
-    // Sauvegarder tous les poids et biais
     fwrite(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
     fwrite(net->biais_1, sizeof(double), NB_FILTER_1, file);
     fwrite(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
@@ -437,15 +435,16 @@ void load_network(char* path, network* net)
         exit(1);
     }
     
-    // Charger tous les poids et biais
-    fread(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
-    fread(net->biais_1, sizeof(double), NB_FILTER_1, file);
-    fread(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
-    fread(net->biais_2, sizeof(double), NB_FILTER_2, file);
-    fread(net->input_weight, sizeof(double), HIDDEN_SIZE * MLP_SIZE, file);
-    fread(net->input_biais, sizeof(double), HIDDEN_SIZE, file);
-    fread(net->hidden_weight, sizeof(double), OUTPUT_SIZE * HIDDEN_SIZE, file);
-    fread(net->hidden_biais, sizeof(double), OUTPUT_SIZE, file);
+    int i = fread(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    i = fread(net->biais_1, sizeof(double), NB_FILTER_1, file);
+    i = fread(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    i = fread(net->biais_2, sizeof(double), NB_FILTER_2, file);
+    i = fread(net->input_weight, sizeof(double), HIDDEN_SIZE * MLP_SIZE, file);
+    i = fread(net->input_biais, sizeof(double), HIDDEN_SIZE, file);
+    i = fread(net->hidden_weight, sizeof(double), OUTPUT_SIZE * HIDDEN_SIZE, file);
+    i = fread(net->hidden_biais, sizeof(double), OUTPUT_SIZE, file);
+
+    i++;
     
     fclose(file);
     printf("Network loaded from %s\n", path);

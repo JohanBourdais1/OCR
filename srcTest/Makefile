@@ -49,4 +49,6 @@ clean:
 	rm -f UI/*~
 	rm -f *~
 	rm -f UI/UI.o
+	rm -f main
+	rm -f network/digitreconizer/network1.txt
 
