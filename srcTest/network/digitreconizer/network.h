@@ -80,14 +80,9 @@ void save_network(char* path, network* net);
 
 void load_network(char* path, network* net);
 
-double** create_grid(char* path);
-
-void write_grid(char* path, double** grid);
-
-double** readGrid(network* net,double** grid);
-
-void freeGrid(double** grid);
-
-void train_network(network* net,double** test);
-
 void free_Network(network* net);
+
+void train(network *n, char *path);
+int Test(network *n, char *path, int digit);
+void test_on10(network *n);
+int is_image_file(const char *filename);
