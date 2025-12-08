@@ -53,9 +53,9 @@ void dense_softmax(network* net);
 
 void relu_backward_inplace(const double *out_forward, double *grad, int n);
 
-void dense_backward_2(double W[][HIDDEN_SIZE], double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M);
+void dense_backward_2(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M);
 
-void dense_backward_1(double W[][MLP_SIZE], double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M);
+void dense_backward_1(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M);
 
 void maxpool2x2_backward(const double *conv_out, int H_conv, int W_conv, int C, const double *dout, double *dconv_out);
 

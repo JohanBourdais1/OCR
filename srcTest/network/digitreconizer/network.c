@@ -192,11 +192,11 @@ void relu_backward_inplace(const double *out_forward, double *grad, int n){
     for(int i=0;i<n;i++) if(out_forward[i] <= 0) grad[i] = 0;
 }
 
-void dense_backward_2(double W[][HIDDEN_SIZE], double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
-    // N = nombre d'entrées (HIDDEN_SIZE)
-    // M = nombre de sorties (OUTPUT_SIZE)
+void dense_backward_2(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
+    // N = nombre d'entrées (HIDDEN_SIZE = 128)
+    // M = nombre de sorties (OUTPUT_SIZE = 10)
     // Forward: y[i] = sum_j(W[i,j] * x[j]) + b[i]
-    // x a N éléments, W est (M x N), dout est (M), dx est (N)
+    // W est (M x N) stocké linéairement
     
     // Gradient des biais et poids
     for(size_t i=0;i<M;i++){
@@ -207,17 +207,19 @@ void dense_backward_2(double W[][HIDDEN_SIZE], double *x, double *dout, double *
     }
     
     // Gradient des entrées
+    // W est linéaire: W[i,j] = W_flat[i*N + j]
     for(size_t j=0;j<N;j++){
         double s = 0.0f;
-        for(size_t i=0;i<M;i++) s += W[i][j] * dout[i];
+        for(size_t i=0;i<M;i++) s += W_flat[i*N + j] * dout[i];
         dx[j] += s;
     }
 }
 
-void dense_backward_1(double W[][MLP_SIZE], double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
-    // N = nombre d'entrées (MLP_SIZE)
-    // M = nombre de sorties (HIDDEN_SIZE)
+void dense_backward_1(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
+    // N = nombre d'entrées (MLP_SIZE = 400)
+    // M = nombre de sorties (HIDDEN_SIZE = 128)
     // Forward: y[i] = sum_j(W[i,j] * x[j]) + b[i]
+    // W est (M x N) stocké linéairement
     
     // Gradient des biais et poids
     for(size_t i=0;i<M;i++){
@@ -228,9 +230,10 @@ void dense_backward_1(double W[][MLP_SIZE], double *x, double *dout, double *dW,
     }
     
     // Gradient des entrées
+    // W est linéaire: W[i,j] = W_flat[i*N + j]
     for(size_t j=0;j<N;j++){
         double s = 0.0f;
-        for(size_t i=0;i<M;i++) s += W[i][j] * dout[i];
+        for(size_t i=0;i<M;i++) s += W_flat[i*N + j] * dout[i];
         dx[j] += s;
     }
 }
