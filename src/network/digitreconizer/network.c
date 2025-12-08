@@ -1,192 +1,436 @@
 #include "network.h"
 
-
 network* init_network()
 {
     srand(time(NULL));
     struct network *net = calloc(1,sizeof(struct network));
-    for (size_t i = 0; i < (size_t)INPUT_SIZE; i++)
+    for (size_t i = 0; i < (size_t)NB_FILTER_1; i++)
     {
-        for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++)
+        net->biais_1[i] = 0;
+    }
+    for (size_t i = 0; i < (size_t)NB_FILTER_2; i++)
+    {
+        net->biais_2[i] = 0;
+    }
+
+    double scale = sqrtf(2.0f / (SIZE_FILTER * SIZE_FILTER));
+    for (size_t i = 0; i < (size_t)NB_FILTER_1; i++)
+    {
+        for (size_t j = 0; j < (size_t)SIZE_FILTER; j++)
         {
-            net->input_weight[i][j]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+            for (size_t k = 0; k < (size_t)SIZE_FILTER; k++)
+            {
+                net->filter_1[i * SIZE_FILTER * SIZE_FILTER + j * SIZE_FILTER + k] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale;
+            }
         }
+    }
+    scale = sqrtf(2.0f / (SIZE_FILTER * SIZE_FILTER * NB_FILTER_1));
+    for (size_t i = 0; i < (size_t)NB_FILTER_2; i++)
+    {
+        for (size_t l = 0; l < (size_t)NB_FILTER_1; l++)
+        {
+            for (size_t j = 0; j < (size_t)SIZE_FILTER; j++)
+            {
+                for (size_t k = 0; k < (size_t)SIZE_FILTER; k++)
+                {
+                    net->filter_2[i * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER + l * SIZE_FILTER * SIZE_FILTER + j * SIZE_FILTER + k]= ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale;
+                }
+            }
+        }
+    }
+    
+    // He initialization for dense layers
+    double scale_dense1 = sqrtf(2.0f / MLP_SIZE);
+    for (size_t i = 0; i < (size_t)HIDDEN_SIZE * MLP_SIZE; i++)
+    {
+        net->input_weight[i] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense1 * 2.0;
     }
     for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
     {
-        net->input_biais[i]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+        net->input_biais[i] = 0.0;
     }
-    for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
+    
+    double scale_dense2 = sqrtf(2.0f / HIDDEN_SIZE);
+    for (size_t i = 0; i < (size_t)OUTPUT_SIZE * HIDDEN_SIZE; i++)
     {
-        for (size_t j = 0; j < (size_t)OUTPUT_SIZE; j++)
-        {
-            net->hidden_weight[i][j]= (double)rand() / RAND_MAX * 2.0 - 1.0;
-        }
+        net->hidden_weight[i] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense2 * 2.0;
     }
     for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
     {
-        net->hidden_biais[i]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+        net->hidden_biais[i] = 0.0;
     }
+    
     return net;
 }
 
-void  input_network(network* net, double input[784])
+void reLU(size_t nb_out, size_t input_size, double* out) 
 {
-    for (size_t j = 0; j < 784; j++)
+    for (size_t i = 0; i < nb_out; i++)
     {
-        net->inputValues[j] = input[j];
-    }
-}
-
-double sigmoid(double x) 
-{
-    return 1.0 / (1.0 + exp(-x));
-}
-
-double sigmoid_derivative(double x) 
-{
-    double sig = sigmoid(x);
-    return sig * (1.0 - sig);
-}
-
-void forward_propagation(network* net)
-{
-    for (size_t i = 0; i < HIDDEN_SIZE; i++)
-    {
-        net->hiddenValues[i] = 0.0;
-        for (size_t j = 0; j < INPUT_SIZE; j++) 
+        for (size_t j = 0; j < input_size; j++)
         {
-            net->hiddenValues[i] += net->inputValues[j] * net->input_weight[j][i];
-        }
-        net->hiddenValues[i] += net->input_biais[i];
-        net->hiddenValues[i] = sigmoid(net->hiddenValues[i]);
-    }
-    for (size_t i = 0; i < OUTPUT_SIZE; i++) 
-    {
-        net->outputValues[i]=0.0;
-        for (size_t j = 0; j < HIDDEN_SIZE; j++)
-        {
-            net->outputValues[i] += net->hiddenValues[j] * net->hidden_weight[j][i];
-        }
-        net->outputValues[i] += net->hidden_biais[i];
-        net->outputValues[i] = sigmoid(net->outputValues[i]);
-    }
-}
-
-void backpropagation(network* net, double* target)
-{
-    double errorRate = 0.0;
-    double errorTemp = 0.0;
-    forward_propagation(net);
-    double output_delta[OUTPUT_SIZE];
-    for (size_t i = 0; i < OUTPUT_SIZE; i++)
-    {
-        errorTemp = target[i] - net->outputValues[i];
-        output_delta[i] = errorTemp * sigmoid_derivative(net->outputValues[i]);
-        errorRate += errorTemp * errorTemp;
-    }
-    double hidden_deltas[HIDDEN_SIZE];
-    for (size_t i = 0; i < HIDDEN_SIZE; i++) 
-    {
-        errorTemp = 0.0;
-        for (size_t j = 0; j < OUTPUT_SIZE; j++)
-        {
-            errorTemp += output_delta[j] * net->hidden_weight[i][j];
-        }
-        hidden_deltas[i] = errorTemp * sigmoid_derivative(net->hiddenValues[i]);
-    }
-    for (size_t i = 0; i < OUTPUT_SIZE; i++) 
-    {
-        for (size_t j = 0; j < HIDDEN_SIZE; j++)
-        {
-            net->hidden_weight[j][i] += LEARNING_RATE * output_delta[i] * net->hiddenValues[j];
-            net->hidden_biais[i] += LEARNING_RATE * output_delta[i]* net->hiddenValues[j];
-        }
-    }
-    for (size_t i = 0; i < HIDDEN_SIZE; i++)
-    {
-        for (size_t j = 0; j < INPUT_SIZE; j++) 
-        {
-            net->input_weight[j][i] += LEARNING_RATE * hidden_deltas[i] * net->inputValues[j];
-            net->input_biais[i] += LEARNING_RATE * hidden_deltas[i]* net->inputValues[j];
+            double *p = &out[i * input_size + j];
+            *p = fmax(0.0, *p);
         }
     }
 }
 
-double** create_test(char* path)
+double* maxPool(double* input, int size, size_t nb_out)
 {
-    double** input = malloc(50*sizeof(double*));
-    for (size_t i = 0; i < 50; i++)
+    int out_size = size / 2;
+    double* out = calloc(nb_out * out_size * out_size, sizeof(double));
+    for (size_t i = 0; i < nb_out; i++)
     {
-        input[i] = malloc(784*sizeof(double));
-    }
-    for (size_t i = 0; i < 10; i++)
-    {
-        for (size_t j = 0; j < 5; j++)
+        double *in_c = &(input[i * size * size]);
+        double *out_c = &(out[i * out_size * out_size]);
+        for (size_t l = 0; l < (size_t)out_size; l++)
         {
-            char* path_image = malloc(100*sizeof(char));
-            sprintf(path_image,"%s/%ld/%ld_%ld.png",path,i,i,j);
-            image_to_array(path_image,input[i*5+j]);
-            free(path_image);
+            for (size_t j = 0; j < (size_t)out_size; j++)
+            {
+                double a = in_c[(2 * l) * size + (2 * j)];
+                double b = in_c[(2 * l) * size + (2 * j + 1)];
+                double c1 = in_c[(2 * l + 1) * size + (2 * j)];
+                double d = in_c[(2 * l + 1) * size + (2 * j + 1)];
+                double m = a > b ? a : b;
+                m = m > c1 ? m : c1;
+                m = m > d ? m : d;
+                out_c[l * out_size + j] = m;
+            }
         }
     }
+    return out;
+}
+
+void apply_conv(int size, size_t nb_out,
+                double* filter, double* input, double* biais, double *conv_out)
+{
+    int out_size = size - 2;
+
+    for (size_t i = 0; i < nb_out; i++)
+    {
+        double *kf = &(filter[i * SIZE_FILTER * SIZE_FILTER]);
+        double b = biais[i];
+        double* out_f = &(conv_out[i * out_size * out_size]);
+
+        for (int l = 0; l < out_size; l++)
+        {
+            for (int j = 0; j < out_size; j++)
+            {
+                double s = b;
+                for (int k = 0; k < SIZE_FILTER; k++)
+                    for (int h = 0; h < SIZE_FILTER; h++)
+                        s += kf[k * SIZE_FILTER + h] * input[(l + k) * size + (j + h)];
+
+                out_f[l * out_size + j] = s;
+            }
+        }
+    }
+
+    reLU(nb_out, out_size * out_size, conv_out);
+}
+
+void dense_reLU(network* net, double* input)
+{
+    for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
+    {
+        double s = net->input_biais[i];
+        for (size_t j = 0; j < (size_t)MLP_SIZE; j++)
+        {
+            s += net->input_weight[i * MLP_SIZE + j] * input[j];
+        }
+        net->hiddenValues[i] = s > 0 ? s : 0;
+    }
+}
+
+void dense_logits(network* net)
+{
+    for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
+    {
+        double s = net->hidden_biais[i];
+        for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++)
+        {
+            s += net->hidden_weight[i * HIDDEN_SIZE + j] * net->hiddenValues[j];
+        }
+        net->outputValues[i] = s;
+    }
+}
+
+void dense_softmax(network *net) {
+    for (int i = 0; i < OUTPUT_SIZE; ++i) {
+        double v = net->outputValues[i];
+        if (isnan(v) || isinf(v)) net->outputValues[i] = 0.0;
+        if (net->outputValues[i] > 700.0) net->outputValues[i] = 700.0;
+        if (net->outputValues[i] < -700.0) net->outputValues[i] = -700.0;
+    }
+
+    double max = net->outputValues[0];
+    for (int i = 1; i < OUTPUT_SIZE; ++i) if (net->outputValues[i] > max) max = net->outputValues[i];
+
+    double sum = 0.0;
+    for (int i = 0; i < OUTPUT_SIZE; ++i) {
+        net->outputValues[i] = exp(net->outputValues[i] - max);
+        sum += net->outputValues[i];
+    }
+    
+    if (sum < 1e-12) sum = 1e-12;
+    for (int i = 0; i < OUTPUT_SIZE; ++i) net->outputValues[i] /= sum;
+}
+
+void relu_backward_inplace(const double *out_forward, double *grad, int n){
+    for(int i=0;i<n;i++) if(out_forward[i] <= 0) grad[i] = 0;
+}
+
+void dense_backward_2(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
+    // N = nombre d'entrées (HIDDEN_SIZE = 128)
+    // M = nombre de sorties (OUTPUT_SIZE = 10)
+    // Forward: y[i] = sum_j(W[i,j] * x[j]) + b[i]
+    // W est (M x N) stocké linéairement
+    
+    // Gradient des biais et poids
+    for(size_t i=0;i<M;i++){
+        db[i] += dout[i];
+        for(size_t j=0;j<N;j++){
+            dW[i*N + j] += dout[i] * x[j];
+        }
+    }
+    
+    // Gradient des entrées
+    // W est linéaire: W[i,j] = W_flat[i*N + j]
+    for(size_t j=0;j<N;j++){
+        double s = 0.0f;
+        for(size_t i=0;i<M;i++) s += W_flat[i*N + j] * dout[i];
+        dx[j] += s;
+    }
+}
+
+void dense_backward_1(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
+    // N = nombre d'entrées (MLP_SIZE = 400)
+    // M = nombre de sorties (HIDDEN_SIZE = 128)
+    // Forward: y[i] = sum_j(W[i,j] * x[j]) + b[i]
+    // W est (M x N) stocké linéairement
+    
+    // Gradient des biais et poids
+    for(size_t i=0;i<M;i++){
+        db[i] += dout[i];
+        for(size_t j=0;j<N;j++){
+            dW[i*N + j] += dout[i] * x[j];
+        }
+    }
+    
+    // Gradient des entrées
+    // W est linéaire: W[i,j] = W_flat[i*N + j]
+    for(size_t j=0;j<N;j++){
+        double s = 0.0f;
+        for(size_t i=0;i<M;i++) s += W_flat[i*N + j] * dout[i];
+        dx[j] += s;
+    }
+}
+
+void maxpool2x2_backward(const double *conv_out, int H_conv, int W_conv, int C, const double *dout, double *dconv_out){
+    int H_p = H_conv/2, W_p = W_conv/2;
+    for(int i=0;i<C*H_conv*W_conv;i++) dconv_out[i] = 0.0f;
+    for(int c=0;c<C;c++){
+        for(int x=0;x<H_p;x++){
+            for(int y=0;y<W_p;y++){
+                int gx = 2*x, gy = 2*y;
+                double a = conv_out[c*H_conv*W_conv + (gx+0)*W_conv + (gy+0)];
+                double b = conv_out[c*H_conv*W_conv + (gx+0)*W_conv + (gy+1)];
+                double c1 = conv_out[c*H_conv*W_conv + (gx+1)*W_conv + (gy+0)];
+                double d = conv_out[c*H_conv*W_conv + (gx+1)*W_conv + (gy+1)];
+                double m = a; int mi=0,mj=0;
+                if(b>m){ m=b; mi=0; mj=1; }
+                if(c1>m){ m=c1; mi=1; mj=0; }
+                if(d>m){ m=d; mi=1; mj=1; }
+                dconv_out[c*H_conv*W_conv + (gx+mi)*W_conv + (gy+mj)] += dout[c*H_p*W_p + x*W_p + y];
+            }
+        }
+    }
+}
+
+void conv2d_valid_backward(const double *in, int H_in, int W_in, int C_in,
+                                  const double *dout, int H_out, int W_out, int C_out,
+                                  const double *w, int Kk,
+                                  double *dW, double *db, double *din)
+{
+    for(int f=0; f<C_out; f++){
+        double s=0;
+        const double *dout_f = dout + (size_t)f * H_out * W_out;
+        for(int x=0;x<H_out;x++) for(int y=0;y<W_out;y++) s += dout_f[x*W_out + y];
+        db[f] += s;
+    }
+    for(int f=0; f<C_out; f++){
+        double *dWf = dW + (size_t)f * C_in * Kk * Kk;
+        const double *dout_f = dout + (size_t)f * H_out * W_out;
+        for(int c=0;c<C_in;c++){
+            const double *in_c = in + (size_t)c * H_in * W_in;
+            double *dWfc = dWf + (size_t)c * Kk * Kk;
+            for(int i=0;i<Kk;i++){
+                for(int j=0;j<Kk;j++){
+                    double sum = 0.0f;
+                    for(int x=0;x<H_out;x++){
+                        for(int y=0;y<W_out;y++){
+                            sum += in_c[(x+i)*W_in + (y+j)] * dout_f[x*W_out + y];
+                        }
+                    }
+                    dWfc[i*Kk + j] += sum;
+                }
+            }
+        }
+    }
+
+    for(int c=0;c<C_in;c++){
+        double *din_c = din + (size_t)c * H_in * W_in;
+        for(int x=0;x<H_in;x++) for(int y=0;y<W_in;y++) din_c[x*W_in + y] += 0.0f;
+    }
+    for(int f=0; f<C_out; f++){
+        const double *wf = w + (size_t)f * C_in * Kk * Kk;
+        const double *dout_f = dout + (size_t)f * H_out * W_out;
+        for(int x=0;x<H_out;x++){
+            for(int y=0;y<W_out;y++){
+                double dout_val = dout_f[x*W_out + y];
+                for(int c=0;c<C_in;c++){
+                    const double *wf_c = wf + (size_t)c * Kk * Kk;
+                    double *din_c = din + (size_t)c * H_in * W_in;
+                    for(int i=0;i<Kk;i++){
+                        for(int j=0;j<Kk;j++){
+                            din_c[(x+i)*W_in + (y+j)] += wf_c[i*Kk + j] * dout_val;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+double* create_Input(char* path)
+{
+    double* input = malloc(784 * sizeof(double));
+    if (input == NULL) {
+        fprintf(stderr, "Memory allocation failed for input\n");
+        return NULL;
+    }
+    
+    FILE *test = fopen(path, "r");
+    if (test == NULL) {
+        fprintf(stderr, "File not found: %s\n", path);
+        free(input);
+        return NULL;
+    }
+    fclose(test);
+    
+    if (image_to_array(path, &input) != 0) {
+        fprintf(stderr, "Failed to convert image: %s\n", path);
+        free(input);
+        return NULL;
+    }
+    
     return input;
 }
 
-void resize_image(char* path)
+double* create_Input_inverted(char* path)
 {
-    SDL_Surface* s = IMG_Load(path);
-    //printf("%s\n",path);
-    if (s == NULL)
-    {
-        printf("Erreur lors du chargement de l'image\n");
-        exit(1);
+    double* input = malloc(784 * sizeof(double));
+    if (input == NULL) {
+        fprintf(stderr, "Memory allocation failed for input\n");
+        return NULL;
     }
-    SDL_Surface *image = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB888, 0);
-    SDL_FreeSurface(s);
-    if (image == NULL)
-    {
-        printf("Erreur lors du chargement de l'image\n");
-        exit(1);
+    
+    FILE *test = fopen(path, "r");
+    if (test == NULL) {
+        fprintf(stderr, "File not found: %s\n", path);
+        free(input);
+        return NULL;
     }
-    SDL_Surface* resized = SDL_CreateRGBSurface(0, 28, 28, 32, 0, 0, 0, 0);
-    if (resized == NULL)
-    {
-        printf("Erreur lors de l'allocation de la mémoire\n");
-        exit(1);
+    fclose(test);
+    
+    if (image_to_array_inverted(path, &input) != 0) {
+        fprintf(stderr, "Failed to convert image: %s\n", path);
+        free(input);
+        return NULL;
     }
-    SDL_BlitScaled(image, NULL, resized, NULL);
-    SDL_SaveBMP(resized,path);
-    SDL_FreeSurface(image);
-    SDL_FreeSurface(resized);
+    
+    return input;
 }
 
-void image_to_array(char* path, double* array)
+int image_to_array(char* path, double** array)
 {
-    resize_image(path);
+    double* input = *array;
+    
     SDL_Surface* s = IMG_Load(path);
-    if (s == NULL)
-    {
-        printf("Erreur lors du chargement de l'image\n");
-        exit(1);
+    if (s == NULL) {
+        fprintf(stderr, "IMG_Load failed for %s: %s\n", path, SDL_GetError());
+        return -1;
     }
+    
     SDL_Surface *image = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB888, 0);
     SDL_FreeSurface(s);
-    if (image == NULL)
-    {
-        printf("Erreur lors du chargement de l'image\n");
-        exit(1);
+    if (image == NULL) {
+        fprintf(stderr, "SDL_ConvertSurfaceFormat failed: %s\n", SDL_GetError());
+        return -1;
     }
-    SDL_LockSurface(image);
-    Uint8 r, g, b;
-    Uint32* pixels = image->pixels;
-    for (size_t i = 0; i < 784; i++)
-    {
-        SDL_GetRGB(pixels[i], image->format, &r, &g, &b);
-        array[i] = (double)(r+g+b)/3/255;
+    
+    SDL_Surface* resized = SDL_CreateRGBSurface(0, 28, 28, 32, 0, 0, 0, 0);
+    if (resized == NULL) {
+        fprintf(stderr, "SDL_CreateRGBSurface failed: %s\n", SDL_GetError());
+        SDL_FreeSurface(image);
+        return -1;
     }
-    SDL_UnlockSurface(image);
+    
+    SDL_BlitScaled(image, NULL, resized, NULL);
     SDL_FreeSurface(image);
+    
+    SDL_LockSurface(resized);
+    Uint8 r, g, b;
+    Uint32* pixels = resized->pixels;
+    for (size_t i = 0; i < 784; i++) {
+        SDL_GetRGB(pixels[i], resized->format, &r, &g, &b);
+        input[i] = (double)(r + g + b) / 3.0 / 255.0;
+    }
+    SDL_UnlockSurface(resized);
+    SDL_FreeSurface(resized);
+    
+    return 0;
+}
+
+int image_to_array_inverted(char* path, double** array)
+{
+    double* input = *array;
+    
+    SDL_Surface* s = IMG_Load(path);
+    if (s == NULL) {
+        fprintf(stderr, "IMG_Load failed for %s: %s\n", path, SDL_GetError());
+        return -1;
+    }
+    
+    SDL_Surface *image = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB888, 0);
+    SDL_FreeSurface(s);
+    if (image == NULL) {
+        fprintf(stderr, "SDL_ConvertSurfaceFormat failed: %s\n", SDL_GetError());
+        return -1;
+    }
+    
+    SDL_Surface* resized = SDL_CreateRGBSurface(0, 28, 28, 32, 0, 0, 0, 0);
+    if (resized == NULL) {
+        fprintf(stderr, "SDL_CreateRGBSurface failed: %s\n", SDL_GetError());
+        SDL_FreeSurface(image);
+        return -1;
+    }
+    
+    SDL_BlitScaled(image, NULL, resized, NULL);
+    SDL_FreeSurface(image);
+    
+    SDL_LockSurface(resized);
+    Uint8 r, g, b;
+    Uint32* pixels = resized->pixels;
+    for (size_t i = 0; i < 784; i++) {
+        SDL_GetRGB(pixels[i], resized->format, &r, &g, &b);
+        // Invert the colors: black becomes white, white becomes black
+        input[i] = 1.0 - (double)(r + g + b) / 3.0 / 255.0;
+    }
+    SDL_UnlockSurface(resized);
+    SDL_FreeSurface(resized);
+    
+    return 0;
 }
 
 void invert_surface(SDL_Surface* surface)
@@ -205,7 +449,6 @@ void invert_surface(SDL_Surface* surface)
     SDL_UnlockSurface(surface);
 }
 
-// Invert the colors of a pixel
 Uint32 invert_pixel(Uint32 pixel_color, SDL_PixelFormat* format)
 {
     Uint8 r, g, b;
@@ -213,193 +456,338 @@ Uint32 invert_pixel(Uint32 pixel_color, SDL_PixelFormat* format)
     return SDL_MapRGB(format, 255 - r, 255 - g, 255 - b);
 }
 
-void save_network(char* path,network* net)
+void print_result(network *net)
 {
-    FILE* file = fopen(path,"wb");
+    for (size_t i = 0; i < 10; i++) {
+        printf("%ld : %f\n", i, net->outputValues[i]);
+    }
+    printf("\n");
+}
+
+int is_image_file(const char *filename) {
+    size_t len = strlen(filename);
+    if (len < 4) return 0;
+    
+    const char *ext = filename + len - 4;
+    return (strcmp(ext, ".png") == 0 || 
+            strcmp(ext, ".PNG") == 0 ||
+            strcmp(ext, ".jpg") == 0 ||
+            strcmp(ext, ".JPG") == 0 ||
+            strcmp(ext, ".bmp") == 0 ||
+            strcmp(ext, ".BMP") == 0);
+}
+
+void save_network(char* path, network* net)
+{
+    FILE* file = fopen(path, "wb");
     if (file == NULL)
     {
-        printf("Erreur lors de l'ouverture du fichier\n");
+        fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", path);
         exit(1);
     }
-    fwrite(net,sizeof(network),1,file);
+    
+    fwrite(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    fwrite(net->biais_1, sizeof(double), NB_FILTER_1, file);
+    fwrite(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    fwrite(net->biais_2, sizeof(double), NB_FILTER_2, file);
+    fwrite(net->input_weight, sizeof(double), HIDDEN_SIZE * MLP_SIZE, file);
+    fwrite(net->input_biais, sizeof(double), HIDDEN_SIZE, file);
+    fwrite(net->hidden_weight, sizeof(double), OUTPUT_SIZE * HIDDEN_SIZE, file);
+    fwrite(net->hidden_biais, sizeof(double), OUTPUT_SIZE, file);
+    
     fclose(file);
+    printf("Network saved to %s\n", path);
 }
 
 void load_network(char* path, network* net)
 {
-    FILE* file = fopen(path,"rb");
+    FILE* file = fopen(path, "rb");
     if (file == NULL)
     {
-        printf("Erreur lors de l'ouverture du fichier\n");
+        fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", path);
         exit(1);
     }
-    int a = fread(net,sizeof(network),1,file);
-    if (a != 1)
-    {
-        printf("Erreur lors de la lecture du fichier\n");
-        exit(1);
-    }
+    
+    int i = fread(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    i = fread(net->biais_1, sizeof(double), NB_FILTER_1, file);
+    i = fread(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    i = fread(net->biais_2, sizeof(double), NB_FILTER_2, file);
+    i = fread(net->input_weight, sizeof(double), HIDDEN_SIZE * MLP_SIZE, file);
+    i = fread(net->input_biais, sizeof(double), HIDDEN_SIZE, file);
+    i = fread(net->hidden_weight, sizeof(double), OUTPUT_SIZE * HIDDEN_SIZE, file);
+    i = fread(net->hidden_biais, sizeof(double), OUTPUT_SIZE, file);
+
+    i++;
+    
     fclose(file);
+    printf("Network loaded from %s\n", path);
 }
 
-double** create_grid(char* path)
+void test_on10(network *n)
 {
-    double** input = calloc(81,sizeof(double*));
-    for (size_t i = 0; i < 9; i++)
+    for (int i = 0; i < 10; i++)
     {
-        for (size_t j = 0; j < 9; j++)
-        {
-            input[i*9+j] = malloc(784*sizeof(double));
-            char* path_image = malloc(100*sizeof(char));
-            sprintf(path_image,"%s/tile_%ld%ld.png",path,i,j);
-            image_to_array(path_image,input[i*9+j]);
-            free(path_image);
-        }
-    }
-    return input;
-}
-
-void write_grid(char* path, double** grid)
-{
-    FILE* file = fopen(path,"w");
-    if (file == NULL)
-    {
-        printf("Erreur lors de l'ouverture du fichier\n");
-        exit(1);
-    }
-    for (size_t i = 0; i < 9; i++)
-    {
-        for (size_t j = 0; j < 9; j++)
-        {
-            if (grid[i][j] == 0)
-            {
-                fprintf(file,".");
-            }
-            else
-            {
-                fprintf(file,"%ld",(size_t)grid[i][j]);
-            }
-            if (j == 2 || j == 5)
-            {
-                fprintf(file,"  ");
-            }
-            
-        }
-        fprintf(file,"\n");
-        if (i == 2 || i == 5)
-        {
-            fprintf(file,"\n");
-        }
-    }
-    fclose(file);
-}
-
-double** readGrid(network* net,double** grid)
-{
-    double** gridres = malloc(9*sizeof(double*));
-    for (size_t i = 0; i < 9; i++)
-    {
-        gridres[i] = malloc(9*sizeof(double));
-    }
-    for (size_t i = 0; i < 81; i++)
-    {
-        input_network(net,grid[i]);
-        forward_propagation(net);
-        double max = 0;
-        size_t index = 0;
-        for (size_t k = 0; k < 10; k++)
-        {
-            //printf("%f ",net.outputValues[k]);
-            if (net->outputValues[k] > max)
-            {
-                max = net->outputValues[k];
-                index = k;
-            }
-        }
-        //printf("\n");
-        gridres[i/9][i%9] = index;
-    }
-    return gridres;
-}
-
-void freeGrid(double** grid)
-{
-    for (size_t i = 0; i < 81; i++)
-    {
-        free(grid[i]);
-    }
-    free(grid);
-}
-
-void freeSudoku(double** grid)
-{
-    for (size_t i = 0; i < 9; i++)
-    {
-        free(grid[i]);
-    }
-    free(grid);
-}
-
-void train_network(network* net, double** test)
-{
-    DIR* rep = opendir("network/digitreconizer/traindata1");
-    if (rep == NULL)
-    {
-        printf("Erreur lors de l'ouverture du dossier\n");
-        exit(1);
-    }
-    double acc = 0;
-    int epoch = 0;
-    while (acc < 1)
-    {
-        struct dirent* ent;
-        while ((ent = readdir(rep)) != NULL)
-        {
-            if (ent->d_name[0] != '.')
-            {
-                char* path_image = malloc(1024*sizeof(char));
-                sprintf(path_image,"network/digitreconizer/traindata1/%s",ent->d_name);
-                double target[10] = {0};
-                target[ent->d_name[0]-'0'] = 1;
-                double input[784];
-                image_to_array(path_image,input);
-                input_network(net,input);
-                backpropagation(net,target);
-                free(path_image);
-            }
-        }
-        rewinddir(rep);
+        char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+        snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/%d.png", i);
+        printf("%s\n", full_name);
+        n->inputValues = create_Input(full_name);
+        double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
+        double *conv2_out = calloc(NB_FILTER_2 * (SIZE - 2) / 2 * (SIZE - 2) / 2, sizeof(double));;
+        apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+        double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+        apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+        double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+        dense_reLU(n, output_filter_2);
         
-        printf("Epoch : %d : ",epoch);
-        double nb_true = 0;
-        for(size_t k = 0; k < 10; k++) 
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                input_network(net,test[i+k*5]);
-                forward_propagation(net);
-                double max = 0;
-                for (size_t j = 0; j < 10; j++)
-                {
-                    if (net->outputValues[j] > max)
-                    {
-                        max = net->outputValues[j];
-                    }
-                }
-                if(max == net->outputValues[k])
-                {
-                    nb_true++;
-                }
-            }
-        }
-        acc = nb_true/50;
-        printf("Accuracy : %f \n", acc);
-        epoch++;
+        dense_logits(n);
+        dense_softmax(n);
+        print_result(n);
+        free(n->inputValues);
+        free(output_filter_2);
+        free(full_name);
+        free(output_filter_1);
+        free(conv2_out);
+        free(conv1_out);
     }
-    closedir(rep);
 }
 
-void freeNetwork(network* net)
+int Test(network *n, char *path, int digit)
 {
-   free(net);
+    DIR* directory = opendir(path);
+    if (directory == NULL) {
+        fprintf(stderr, "Can't open %s\n", path);
+        return -1;
+    }
+
+    struct dirent* entry = NULL;
+    int res = 0;
+        while ((entry = readdir(directory)) != NULL) {
+            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
+
+            if (entry->d_type == DT_DIR) {
+                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                    int result = Test(n, full_name, entry->d_name[0] - '0');
+                    switch (entry->d_name[0] - '0')
+                    {
+                        case 0:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 980);
+                            break;
+                        case 1:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1135);
+                            break;
+                        case 2:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1032);
+                            break;
+                        case 3:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1010);
+                            break;
+                        case 4:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 982);
+                            break;
+                        case 5:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 892);
+                            break;
+                        case 6:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 958);
+                            break;
+                        case 7:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1028);
+                            break;
+                        case 8:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 974);
+                            break;
+                        case 9:
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1009);
+                            break;
+                    }
+                    
+                }
+                free(full_name);
+            } else {
+                if (!is_image_file(entry->d_name)) {
+                    free(full_name);
+                    continue;
+                }
+                n->inputValues = create_Input(full_name);
+                double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
+                double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
+                apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+                double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+                apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+                double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+                dense_reLU(n, output_filter_2);
+                dense_logits(n);
+                dense_softmax(n);
+                int pred = 0;
+                for(int i=1;i<OUTPUT_SIZE;i++) 
+                {
+                    if(n->outputValues[i] > n->outputValues[pred]) pred = i;
+                }
+                if (digit == pred)
+                    res++;
+                free(output_filter_2);
+                free(full_name);
+                free(output_filter_1);
+                free(conv2_out);
+                free(conv1_out);
+                free(n->inputValues);
+            }
+        }
+        closedir(directory);
+    return res;
+}
+
+// L2 regularization update
+void apply_l2_regularization(double* weights, double* grad_weights, size_t size, double lr, double lambda)
+{
+    for (size_t i = 0; i < size; i++) {
+        weights[i] -= lr * (grad_weights[i] + lambda * weights[i]);
+    }
+}
+
+void train(network *n, char *path)
+{
+    double lr = 0.0006f;  // Slightly reduced from 0.0007
+    int max_iterations = 60000;
+    DIR* directory = opendir(path);
+    if (directory == NULL) {
+        fprintf(stderr, "Can't open %s\n", path);
+        return;
+    }
+
+    double *dconv1_w = calloc((size_t)NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, sizeof(double));
+    double *dconv1_b = calloc((size_t)NB_FILTER_1, sizeof(double));
+    double *dconv2_w = calloc((size_t)NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, sizeof(double));
+    double *dconv2_b = calloc((size_t)NB_FILTER_2, sizeof(double));
+    double *ddense1_w = calloc((size_t)HIDDEN_SIZE * MLP_SIZE, sizeof(double));
+    double *ddense1_b = calloc((size_t)HIDDEN_SIZE, sizeof(double));
+    double *ddense2_w = calloc((size_t)OUTPUT_SIZE * HIDDEN_SIZE, sizeof(double));
+    double *ddense2_b = calloc((size_t)OUTPUT_SIZE, sizeof(double));
+
+    struct dirent* entry = NULL;
+    int e = 0;
+        while ((entry = readdir(directory)) != NULL && e < max_iterations) {
+            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
+
+            if (entry->d_type == DT_DIR) {
+                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                    train(n, full_name);
+                }
+                free(full_name);
+            } else {
+                if (!is_image_file(entry->d_name)) {
+                    free(full_name);
+                    continue;
+                }
+                printf("%s\n", full_name);
+                n->inputValues = create_Input(full_name);
+                memset(dconv1_w, 0, (size_t)NB_FILTER_1 * 1 * SIZE_FILTER * SIZE_FILTER * sizeof(double));
+                memset(dconv1_b, 0, (size_t)NB_FILTER_1 * sizeof(double));
+                memset(dconv2_w, 0, (size_t)NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER * sizeof(double));
+                memset(dconv2_b, 0, (size_t)NB_FILTER_2 * sizeof(double));
+                memset(ddense1_w, 0, (size_t)HIDDEN_SIZE * MLP_SIZE * sizeof(double));
+                memset(ddense1_b, 0, (size_t)HIDDEN_SIZE * sizeof(double));
+                memset(ddense2_w, 0, (size_t)OUTPUT_SIZE * HIDDEN_SIZE * sizeof(double));
+                memset(ddense2_b, 0, (size_t)OUTPUT_SIZE * sizeof(double));
+                double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
+                double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
+                apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+                double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+
+                apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+                double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+
+                dense_reLU(n, output_filter_2);
+                
+                dense_logits(n);
+                
+                dense_softmax(n);
+                char *tmp = strrchr(full_name, '/');
+                if (tmp == NULL) tmp = full_name;
+                else tmp++;
+                int gt = tmp[0] - '0';
+                int pred = 0;
+                for(int i=1;i<OUTPUT_SIZE;i++) 
+                {
+                    if(n->outputValues[i] > n->outputValues[pred]) pred = i;
+                }
+                printf("%d    %d    %f    %d\n\n", gt, pred, n->outputValues[pred], e);
+                double* dlogits = calloc(OUTPUT_SIZE, sizeof(double));
+                for(int i=0;i<OUTPUT_SIZE;i++) dlogits[i] = n->outputValues[i];
+                dlogits[gt] -= 1.0f;
+                double *dx_dense1 = calloc(HIDDEN_SIZE, sizeof(double));
+                dense_backward_2(n->hidden_weight, n->hiddenValues, dlogits, ddense2_w, ddense2_b, dx_dense1, HIDDEN_SIZE, OUTPUT_SIZE);
+
+                relu_backward_inplace(n->hiddenValues, dx_dense1, HIDDEN_SIZE);
+
+                double *dflat = calloc(MLP_SIZE, sizeof(double));
+                dense_backward_1(n->input_weight, output_filter_2, dx_dense1, ddense1_w, ddense1_b, dflat, MLP_SIZE, HIDDEN_SIZE);
+
+                free(dx_dense1);
+
+                double *dpool2 = malloc((size_t)NB_FILTER_2 * 5 * 5 * sizeof(double));
+                memcpy(dpool2, dflat, (size_t)MLP_SIZE * sizeof(double));
+                free(dflat);
+
+                double *dconv2_out = calloc((size_t)NB_FILTER_2 * 11 * 11, sizeof(double));
+                maxpool2x2_backward(conv2_out, 11, 11, NB_FILTER_2, dpool2, dconv2_out);
+                free(dpool2);
+
+                relu_backward_inplace(conv2_out, dconv2_out, NB_FILTER_2*11*11);
+
+                double *dpool1 = calloc((size_t)NB_FILTER_1 * 13 * 13, sizeof(double));
+                conv2d_valid_backward(output_filter_1, 13, 13, NB_FILTER_1, dconv2_out, 11, 11, NB_FILTER_2, n->filter_2, SIZE_FILTER, dconv2_w, dconv2_b, dpool1);
+                free(dconv2_out);
+
+                double *dconv1_out = calloc((size_t)NB_FILTER_1 * 26 * 26, sizeof(double));
+                maxpool2x2_backward(conv1_out, 26, 26, NB_FILTER_1, dpool1, dconv1_out);
+                free(dpool1);
+
+                relu_backward_inplace(conv1_out, dconv1_out, NB_FILTER_1*26*26);
+
+                double *din = calloc((size_t)1 * SIZE * SIZE, sizeof(double));
+                conv2d_valid_backward(n->inputValues, SIZE, SIZE, 1, dconv1_out, 26, 26, NB_FILTER_1, n->filter_1, SIZE_FILTER, dconv1_w, dconv1_b, din);
+
+                double current_lr = lr;
+                if (e > 30000) current_lr = lr * 0.5;
+                if (e > 40000) current_lr = lr * 0.2;
+
+                // Update weights with L2 regularization
+                apply_l2_regularization(n->filter_1, dconv1_w, (size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER, current_lr, L2_LAMBDA);
+                for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= current_lr * dconv1_b[i];
+                apply_l2_regularization(n->filter_2, dconv2_w, (size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER, current_lr, L2_LAMBDA);
+                for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= current_lr * dconv2_b[i];
+                apply_l2_regularization(n->input_weight, ddense1_w, (size_t)HIDDEN_SIZE * MLP_SIZE, current_lr, L2_LAMBDA);
+                for(size_t i=0;i<(size_t)HIDDEN_SIZE;i++) n->input_biais[i] -= current_lr * ddense1_b[i];
+                apply_l2_regularization(n->hidden_weight, ddense2_w, (size_t)OUTPUT_SIZE * HIDDEN_SIZE, current_lr, L2_LAMBDA);
+                for(size_t i=0;i<(size_t)OUTPUT_SIZE;i++) n->hidden_biais[i] -= current_lr * ddense2_b[i];
+
+                free(dconv1_out);
+                free(din);
+                free(output_filter_1);
+                free(output_filter_2);
+                free(n->inputValues);
+                free(full_name);
+                free(dlogits);
+                free(conv2_out);
+                free(conv1_out);
+                e++;
+            }
+        }
+        free(dconv1_w);
+        free(dconv1_b);
+        free(dconv2_b);
+        free(dconv2_w);
+        free(ddense1_w);
+        free(ddense1_b);
+        free(ddense2_b);
+        free(ddense2_w);
+        closedir(directory);
+}
+
+void free_Network(network* net)
+{
+    free(net);
 }

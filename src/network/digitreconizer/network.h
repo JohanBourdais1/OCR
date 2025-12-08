@@ -13,37 +13,68 @@
 #include <err.h>
 
 #define INPUT_SIZE 784
-#define HIDDEN_SIZE 450
+#define SIZE 28
+#define NB_FILTER_1 16  // Doubler de 8 à 16
+#define NB_FILTER_2 32  // Doubler de 16 à 32
+#define SIZE_FILTER 3
+#define MLP_SIZE 800    // Adapter car 32 filtres × 5×5 = 800
+#define HIDDEN_SIZE 256  // Augmenter de 128 à 256 pour plus de capacité
 #define OUTPUT_SIZE 10
-#define LEARNING_RATE 0.01
-
+#define MAX_FILE_NAME_SIZE 1024
+#define L2_LAMBDA 0.00005  // L2 regularization coefficient (reduced)
 
 typedef struct network
 {
-    double inputValues[INPUT_SIZE];
+    double* inputValues;
+    double filter_1[NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER];
+    double biais_1[NB_FILTER_1];
+    double filter_2[NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER];
+    double biais_2[NB_FILTER_2];
     double hiddenValues[HIDDEN_SIZE];
     double outputValues[OUTPUT_SIZE];
     double input_biais[HIDDEN_SIZE];
-    double input_weight[INPUT_SIZE][HIDDEN_SIZE];
+    double input_weight[HIDDEN_SIZE * MLP_SIZE];
     double hidden_biais[OUTPUT_SIZE];
-    double hidden_weight[HIDDEN_SIZE][OUTPUT_SIZE];
+    double hidden_weight[OUTPUT_SIZE * HIDDEN_SIZE];
 } network;
 
 network* init_network();
 
-void input_network(network* net, double input[784]);
+void reLU(size_t nb_out, size_t input_size, double* out);
 
-double sigmoid(double x);
+void apply_conv(int size, size_t nb_out,
+                double* filter, double* input, double* biais, double *conv_out);
+                
+double* maxPool(double* input, int size, size_t nb_out);
 
-double sigmoid_derivative(double x);
+void dense_reLU(network* net, double* input);
 
-void forward_propagation(network* net);
+void dense_logits(network* net);
 
-void backpropagation(network* net, double* target);
+void dense_softmax(network* net);
 
-void image_to_array(char* path,double* array);
+void relu_backward_inplace(const double *out_forward, double *grad, int n);
 
-double** create_test(char* path);
+void dense_backward_2(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M);
+
+void dense_backward_1(double *W_flat, double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M);
+
+void maxpool2x2_backward(const double *conv_out, int H_conv, int W_conv, int C, const double *dout, double *dconv_out);
+
+void conv2d_valid_backward(const double *in, int H_in, int W_in, int C_in,
+                                  const double *dout, int H_out, int W_out, int C_out,
+                                  const double *w, int Kk,
+                                  double *dW, double *db, double *din);
+
+void apply_l2_regularization(double* weights, double* grad_weights, size_t size, double lr, double lambda);
+
+int image_to_array(char* path, double** array);
+
+int image_to_array_inverted(char* path, double** array);
+
+double* create_Input(char* path);
+
+double* create_Input_inverted(char* path);
 
 void resize_image(char* path);
 
@@ -51,20 +82,15 @@ void invert_surface(SDL_Surface* surface);
 
 Uint32 invert_pixel(Uint32 pixel_color, SDL_PixelFormat* format);
 
+void print_result(network *net);
+
 void save_network(char* path, network* net);
 
 void load_network(char* path, network* net);
 
-double** create_grid(char* path);
+void free_Network(network* net);
 
-void write_grid(char* path, double** grid);
-
-double** readGrid(network* net,double** grid);
-
-void freeGrid(double** grid);
-
-void freeSudoku(double** grid);
-
-void train_network(network* net,double** test);
-
-void freeNetwork(network* net);
+void train(network *n, char *path);
+int Test(network *n, char *path, int digit);
+void test_on10(network *n);
+int is_image_file(const char *filename);
