@@ -17,7 +17,7 @@
 #define NB_FILTER_1 8
 #define NB_FILTER_2 16
 #define SIZE_FILTER 3
-#define MLP_SIZE (((SIZE - 2) / 2 - 2) / 2) * (((SIZE - 2) / 2 - 2) / 2) * NB_FILTER_2
+#define MLP_SIZE 400
 #define HIDDEN_SIZE 128
 #define OUTPUT_SIZE 10
 
@@ -46,6 +46,8 @@ void apply_conv(network* net, int size, size_t nb_out,
 double* maxPool(double* input, int size, size_t nb_out);
 
 void dense_reLU(network* net, double* input);
+
+void dense_logits(network* net);
 
 void dense_softmax(network* net);
 

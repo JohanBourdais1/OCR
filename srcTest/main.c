@@ -34,7 +34,7 @@ bool check_and_print_layer(const char *name, double *arr, size_t n) {
 
 void train(network *n, char *path)
 {
-    double lr = 0.01f;
+    double lr = 0.01f;  // Réaugmenter le LR puisqu'on a stabilisé avec 0.1x pour convolutions
     int epochs = 200;
     DIR* directory = opendir(path);
     if (directory == NULL) {
@@ -82,22 +82,31 @@ void train(network *n, char *path)
                 apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
                 double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
 
-                size_t conv1_n = (size_t)NB_FILTER_1 * (SIZE - 2) * (SIZE - 2);
-                if (check_and_print_layer("conv1_out", conv1_out, conv1_n)) {
-                    printf("⚠️ Explosion détectée après conv1 (file=%s)\n", full_name);
-                    return;
-                }
-
                 apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
                 double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
 
-                size_t conv2_n = (size_t)NB_FILTER_2 * ((SIZE - 2) / 2 - 2) * ((SIZE - 2) / 2 - 2);
-                if (check_and_print_layer("conv2_out", conv2_out, conv2_n)) {
-                    printf("⚠️ Explosion détectée après conv2 (file=%s)\n", full_name);
-                    return;
-                }
-
                 dense_reLU(n, output_filter_2);
+                
+                // Diagnostic: vérifier les hidden values
+                double hidden_sum = 0, hidden_max = -INFINITY, hidden_min = INFINITY;
+                for (int k = 0; k < HIDDEN_SIZE; k++) {
+                    hidden_sum += n->hiddenValues[k];
+                    if (n->hiddenValues[k] > hidden_max) hidden_max = n->hiddenValues[k];
+                    if (n->hiddenValues[k] < hidden_min) hidden_min = n->hiddenValues[k];
+                }
+                printf("  hidden: min=%g max=%g mean=%g\n", hidden_min, hidden_max, hidden_sum / HIDDEN_SIZE);
+                
+                dense_logits(n);
+                
+                // Diagnostic: vérifier les logits
+                double logit_sum = 0, logit_max = -INFINITY, logit_min = INFINITY;
+                for (int k = 0; k < OUTPUT_SIZE; k++) {
+                    logit_sum += n->outputValues[k];
+                    if (n->outputValues[k] > logit_max) logit_max = n->outputValues[k];
+                    if (n->outputValues[k] < logit_min) logit_min = n->outputValues[k];
+                }
+                printf("  logits: min=%g max=%g mean=%g\n", logit_min, logit_max, logit_sum / OUTPUT_SIZE);
+                
                 dense_softmax(n);
                 char *tmp = strrchr(full_name, '/');
                 if (tmp == NULL) tmp = full_name;
@@ -145,10 +154,11 @@ void train(network *n, char *path)
                 double *din = calloc((size_t)1 * SIZE * SIZE, sizeof(double));
                 conv2d_valid_backward(n->inputValues, SIZE, SIZE, 1, dconv1_out, 26, 26, NB_FILTER_1, n->filter_1, SIZE_FILTER, dconv1_w, dconv1_b, din);
 
-                for(size_t i=0;i<(size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_1[i] -= lr * dconv1_w[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= lr * dconv1_b[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= lr * dconv2_w[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= lr * dconv2_b[i];
+                // Appliquer un learning rate plus petit aux filtres convolutionnels (0.02)
+                for(size_t i=0;i<(size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_1[i] -= lr * 0.1 * dconv1_w[i];
+                for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= lr * 0.1 * dconv1_b[i];
+                for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= lr * 0.1 * dconv2_w[i];
+                for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= lr * 0.1 * dconv2_b[i];
                 for(size_t i=0;i<(size_t)HIDDEN_SIZE;i++) {
                     for(size_t j=0;j<(size_t)MLP_SIZE;j++) {
                         n->input_weight[i][j] -= lr * ddense1_w[i * MLP_SIZE + j];
@@ -168,6 +178,18 @@ void train(network *n, char *path)
                 free(output_filter_2);
                 free(n->inputValues);
                 free(full_name);
+                
+                // Diagnostic: afficher les normes des gradients
+                if (e % 5 == 0 || e < 3) {
+                    double gn2w = 0, gn1w = 0, gn_conv2 = 0, gn_conv1 = 0;
+                    for (size_t i = 0; i < (size_t)OUTPUT_SIZE * HIDDEN_SIZE; i++) gn2w += ddense2_w[i] * ddense2_w[i];
+                    for (size_t i = 0; i < (size_t)HIDDEN_SIZE * MLP_SIZE; i++) gn1w += ddense1_w[i] * ddense1_w[i];
+                    for (size_t i = 0; i < (size_t)NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER; i++) gn_conv2 += dconv2_w[i] * dconv2_w[i];
+                    for (size_t i = 0; i < (size_t)NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER; i++) gn_conv1 += dconv1_w[i] * dconv1_w[i];
+                    printf("  GradNorms: dense2_w=%g dense1_w=%g conv2_w=%g conv1_w=%g\n", 
+                           sqrt(gn2w), sqrt(gn1w), sqrt(gn_conv2), sqrt(gn_conv1));
+                }
+                
                 free(dlogits);
                 free(conv2_out);
                 free(conv1_out);
@@ -183,7 +205,7 @@ void train(network *n, char *path)
         free(ddense2_b);
         free(ddense2_w);
         closedir(directory);
-
+/*
     for (int i = 0; i < 10; i++)
     {
         char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
@@ -206,6 +228,7 @@ void train(network *n, char *path)
         free(conv2_out);
         free(conv1_out);
     }
+        */
 }
 /*
 

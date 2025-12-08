@@ -38,27 +38,32 @@ network* init_network()
             }
         }
     }
+    
+    // He initialization for dense layers
+    double scale_dense1 = sqrtf(2.0f / MLP_SIZE);
     for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
     {
         for (size_t j = 0; j < (size_t)MLP_SIZE; j++)
         {
-            net->input_weight[i][j]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+            net->input_weight[i][j] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense1 * 2.0;  // x2 pour plus de signal
         }
     }
     for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
     {
-        net->input_biais[i]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+        net->input_biais[i] = 0.0;  // Initialiser les biais à 0
     }
+    
+    double scale_dense2 = sqrtf(2.0f / HIDDEN_SIZE);
     for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
     {
         for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++)
         {
-            net->hidden_weight[i][j]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+            net->hidden_weight[i][j] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense2 * 2.0;  // x2 pour plus de signal
         }
     }
     for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
     {
-        net->hidden_biais[i]= (double)rand() / RAND_MAX * 2.0 - 1.0;
+        net->hidden_biais[i] = 0.0;  // Initialiser les biais à 0
     }
     return net;
 }
@@ -142,23 +147,43 @@ void dense_reLU(network* net, double* input)
     }
 }
 
+// Second dense layer: hiddenValues -> logits (before softmax)
+void dense_logits(network* net)
+{
+    for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
+    {
+        double s = net->hidden_biais[i];
+        for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++)
+        {
+            s += net->hidden_weight[i][j] * net->hiddenValues[j];
+        }
+        net->outputValues[i] = s;
+    }
+}
+
+// Apply softmax to logits
 void dense_softmax(network *net) {
+    // First clip and handle NaN/Inf
     for (int i = 0; i < OUTPUT_SIZE; ++i) {
         double v = net->outputValues[i];
         if (isnan(v) || isinf(v)) net->outputValues[i] = 0.0;
+        // Clip extreme values before exp
+        if (net->outputValues[i] > 700.0) net->outputValues[i] = 700.0;
+        if (net->outputValues[i] < -700.0) net->outputValues[i] = -700.0;
     }
 
+    // Subtract max for numerical stability
     double max = net->outputValues[0];
     for (int i = 1; i < OUTPUT_SIZE; ++i) if (net->outputValues[i] > max) max = net->outputValues[i];
 
+    // Compute softmax
     double sum = 0.0;
     for (int i = 0; i < OUTPUT_SIZE; ++i) {
-        double x = net->outputValues[i] - max;
-        if (x > 700.0) x = 700.0;
-        if (x < -700.0) x = -700.0;
-        net->outputValues[i] = exp(x);
+        net->outputValues[i] = exp(net->outputValues[i] - max);
         sum += net->outputValues[i];
     }
+    
+    // Normalize
     if (sum < 1e-12) sum = 1e-12;
     for (int i = 0; i < OUTPUT_SIZE; ++i) net->outputValues[i] /= sum;
 }
@@ -168,12 +193,20 @@ void relu_backward_inplace(const double *out_forward, double *grad, int n){
 }
 
 void dense_backward_2(double W[][HIDDEN_SIZE], double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
+    // N = nombre d'entrées (HIDDEN_SIZE)
+    // M = nombre de sorties (OUTPUT_SIZE)
+    // Forward: y[i] = sum_j(W[i,j] * x[j]) + b[i]
+    // x a N éléments, W est (M x N), dout est (M), dx est (N)
+    
+    // Gradient des biais et poids
     for(size_t i=0;i<M;i++){
         db[i] += dout[i];
         for(size_t j=0;j<N;j++){
             dW[i*N + j] += dout[i] * x[j];
         }
     }
+    
+    // Gradient des entrées
     for(size_t j=0;j<N;j++){
         double s = 0.0f;
         for(size_t i=0;i<M;i++) s += W[i][j] * dout[i];
@@ -182,12 +215,19 @@ void dense_backward_2(double W[][HIDDEN_SIZE], double *x, double *dout, double *
 }
 
 void dense_backward_1(double W[][MLP_SIZE], double *x, double *dout, double *dW, double *db, double *dx, size_t N, size_t M){
+    // N = nombre d'entrées (MLP_SIZE)
+    // M = nombre de sorties (HIDDEN_SIZE)
+    // Forward: y[i] = sum_j(W[i,j] * x[j]) + b[i]
+    
+    // Gradient des biais et poids
     for(size_t i=0;i<M;i++){
         db[i] += dout[i];
         for(size_t j=0;j<N;j++){
             dW[i*N + j] += dout[i] * x[j];
         }
     }
+    
+    // Gradient des entrées
     for(size_t j=0;j<N;j++){
         double s = 0.0f;
         for(size_t i=0;i<M;i++) s += W[i][j] * dout[i];
