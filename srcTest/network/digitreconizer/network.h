@@ -31,9 +31,9 @@ typedef struct network
     double hiddenValues[HIDDEN_SIZE];
     double outputValues[OUTPUT_SIZE];
     double input_biais[HIDDEN_SIZE];
-    double input_weight[HIDDEN_SIZE][MLP_SIZE];
+    double input_weight[HIDDEN_SIZE * MLP_SIZE];  // Stocké linéairement
     double hidden_biais[OUTPUT_SIZE];
-    double hidden_weight[OUTPUT_SIZE][HIDDEN_SIZE];
+    double hidden_weight[OUTPUT_SIZE * HIDDEN_SIZE];  // Stocké linéairement
 } network;
 
 network* init_network();

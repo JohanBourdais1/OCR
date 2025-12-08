@@ -41,29 +41,23 @@ network* init_network()
     
     // He initialization for dense layers
     double scale_dense1 = sqrtf(2.0f / MLP_SIZE);
-    for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
+    for (size_t i = 0; i < (size_t)HIDDEN_SIZE * MLP_SIZE; i++)
     {
-        for (size_t j = 0; j < (size_t)MLP_SIZE; j++)
-        {
-            net->input_weight[i][j] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense1 * 2.0;  // x2 pour plus de signal
-        }
+        net->input_weight[i] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense1 * 2.0;
     }
     for (size_t i = 0; i < (size_t)HIDDEN_SIZE; i++)
     {
-        net->input_biais[i] = 0.0;  // Initialiser les biais à 0
+        net->input_biais[i] = 0.0;
     }
     
     double scale_dense2 = sqrtf(2.0f / HIDDEN_SIZE);
-    for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
+    for (size_t i = 0; i < (size_t)OUTPUT_SIZE * HIDDEN_SIZE; i++)
     {
-        for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++)
-        {
-            net->hidden_weight[i][j] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense2 * 2.0;  // x2 pour plus de signal
-        }
+        net->hidden_weight[i] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * scale_dense2 * 2.0;
     }
     for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
     {
-        net->hidden_biais[i] = 0.0;  // Initialiser les biais à 0
+        net->hidden_biais[i] = 0.0;
     }
     return net;
 }
@@ -141,7 +135,7 @@ void dense_reLU(network* net, double* input)
         double s = net->input_biais[i];
         for (size_t j = 0; j < (size_t)MLP_SIZE; j++)
         {
-            s += net->input_weight[i][j] * input[j];
+            s += net->input_weight[i * MLP_SIZE + j] * input[j];
         }
         net->hiddenValues[i] = s > 0 ? s : 0;
     }
@@ -155,7 +149,7 @@ void dense_logits(network* net)
         double s = net->hidden_biais[i];
         for (size_t j = 0; j < (size_t)HIDDEN_SIZE; j++)
         {
-            s += net->hidden_weight[i][j] * net->hiddenValues[j];
+            s += net->hidden_weight[i * HIDDEN_SIZE + j] * net->hiddenValues[j];
         }
         net->outputValues[i] = s;
     }
