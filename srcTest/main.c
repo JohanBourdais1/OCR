@@ -34,8 +34,8 @@ bool check_and_print_layer(const char *name, double *arr, size_t n) {
 
 void train(network *n, char *path)
 {
-    double lr = 0.01f;  // Réaugmenter le LR puisqu'on a stabilisé avec 0.1x pour convolutions
-    int epochs = 200;
+    double lr = 0.001f;
+    int max_iterations = 60000;  // Augmenter pour plus d'apprentissage
     DIR* directory = opendir(path);
     if (directory == NULL) {
         fprintf(stderr, "Can't open %s\n", path);
@@ -53,7 +53,7 @@ void train(network *n, char *path)
 
     struct dirent* entry = NULL;
     int e = 0;
-        while ((entry = readdir(directory)) != NULL && e < epochs) {
+        while ((entry = readdir(directory)) != NULL && e < max_iterations) {
             char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
             snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
 
@@ -154,19 +154,24 @@ void train(network *n, char *path)
                 double *din = calloc((size_t)1 * SIZE * SIZE, sizeof(double));
                 conv2d_valid_backward(n->inputValues, SIZE, SIZE, 1, dconv1_out, 26, 26, NB_FILTER_1, n->filter_1, SIZE_FILTER, dconv1_w, dconv1_b, din);
 
-                // Appliquer un learning rate plus petit aux filtres convolutionnels (0.02)
-                for(size_t i=0;i<(size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_1[i] -= lr * 0.1 * dconv1_w[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= lr * 0.1 * dconv1_b[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= lr * 0.1 * dconv2_w[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= lr * 0.1 * dconv2_b[i];
+                // Learning rate decay: réduire le LR après 30000 itérations
+                double current_lr = lr;
+                if (e > 30000) current_lr = lr * 0.5;  // Réduire de moitié après 30k
+                if (e > 40000) current_lr = lr * 0.2;  // Réduire encore après 40k
+                
+                // Mise à jour des poids
+                for(size_t i=0;i<(size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_1[i] -= current_lr * dconv1_w[i];
+                for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= current_lr * dconv1_b[i];
+                for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= current_lr * dconv2_w[i];
+                for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= current_lr * dconv2_b[i];
                 for(size_t i=0;i<(size_t)HIDDEN_SIZE * MLP_SIZE;i++) {
-                    n->input_weight[i] -= lr * ddense1_w[i];
+                    n->input_weight[i] -= current_lr * ddense1_w[i];
                 }
-                for(size_t i=0;i<(size_t)HIDDEN_SIZE;i++) n->input_biais[i] -= lr * ddense1_b[i];
+                for(size_t i=0;i<(size_t)HIDDEN_SIZE;i++) n->input_biais[i] -= current_lr * ddense1_b[i];
                 for(size_t i = 0; i < (size_t)OUTPUT_SIZE * HIDDEN_SIZE; i++) {
-                    n->hidden_weight[i] -= lr * ddense2_w[i];
+                    n->hidden_weight[i] -= current_lr * ddense2_w[i];
                 }
-                for(size_t i=0;i<(size_t)OUTPUT_SIZE;i++) n->hidden_biais[i] -= lr * ddense2_b[i];
+                for(size_t i=0;i<(size_t)OUTPUT_SIZE;i++) n->hidden_biais[i] -= current_lr * ddense2_b[i];
 
                 free(dconv1_out);
                 free(din);
@@ -201,7 +206,12 @@ void train(network *n, char *path)
         free(ddense2_b);
         free(ddense2_w);
         closedir(directory);
-/*
+    
+    // Sauvegarder le réseau entraîné
+    printf("\n=== Saving trained network ===\n");
+    save_network("network/digitreconizer/network_trained.dat", n);
+
+    printf("\n=== Testing on sample images ===\n");
     for (int i = 0; i < 10; i++)
     {
         char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
@@ -215,6 +225,8 @@ void train(network *n, char *path)
         apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
         double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
         dense_reLU(n, output_filter_2);
+        
+        dense_logits(n);
         dense_softmax(n);
         print_result(n);
         free(n->inputValues);
@@ -224,7 +236,7 @@ void train(network *n, char *path)
         free(conv2_out);
         free(conv1_out);
     }
-        */
+
 }
 /*
 
@@ -380,10 +392,45 @@ void train_Test(network *n, char *path)
 
 */
 
-int main()
+int main(int argc, char *argv[])
 {
     network* n = init_network();
-    train(n, "network/digitreconizer/data/mnist_png/train");
+    
+    // Vérifier si on veut charger un réseau existant
+    if (argc > 1 && strcmp(argv[1], "--load") == 0) {
+        printf("Loading existing network...\n");
+        load_network("network/digitreconizer/network_trained.dat", n);
+        
+        // Tester directement
+        printf("\n=== Testing on sample images ===\n");
+        for (int i = 0; i < 10; i++)
+        {
+            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+            snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/%d.png", i);
+            printf("%s\n", full_name);
+            n->inputValues = create_Input(full_name);
+            double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
+            double *conv2_out = calloc(NB_FILTER_2 * (SIZE - 2) / 2 * (SIZE - 2) / 2, sizeof(double));
+            apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+            double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+            apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+            double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+            dense_reLU(n, output_filter_2);
+            dense_logits(n);
+            dense_softmax(n);
+            print_result(n);
+            free(n->inputValues);
+            free(output_filter_2);
+            free(full_name);
+            free(output_filter_1);
+            free(conv2_out);
+            free(conv1_out);
+        }
+    } else {
+        printf("Starting fresh training...\n");
+        train(n, "network/digitreconizer/data/mnist_png/train");
+    }
+    
     free_Network(n);
     return 0;
 }

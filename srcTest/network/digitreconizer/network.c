@@ -404,184 +404,53 @@ void print_result(network *net)
     }
     printf("\n");
 }
-/*
-void save_network(char* path,network* net)
+
+void save_network(char* path, network* net)
 {
-    FILE* file = fopen(path,"wb");
+    FILE* file = fopen(path, "wb");
     if (file == NULL)
     {
-        printf("Erreur lors de l'ouverture du fichier\n");
+        fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", path);
         exit(1);
     }
-    fwrite(net,sizeof(network),1,file);
+    
+    // Sauvegarder tous les poids et biais
+    fwrite(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    fwrite(net->biais_1, sizeof(double), NB_FILTER_1, file);
+    fwrite(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    fwrite(net->biais_2, sizeof(double), NB_FILTER_2, file);
+    fwrite(net->input_weight, sizeof(double), HIDDEN_SIZE * MLP_SIZE, file);
+    fwrite(net->input_biais, sizeof(double), HIDDEN_SIZE, file);
+    fwrite(net->hidden_weight, sizeof(double), OUTPUT_SIZE * HIDDEN_SIZE, file);
+    fwrite(net->hidden_biais, sizeof(double), OUTPUT_SIZE, file);
+    
     fclose(file);
+    printf("Network saved to %s\n", path);
 }
 
 void load_network(char* path, network* net)
 {
-    FILE* file = fopen(path,"rb");
+    FILE* file = fopen(path, "rb");
     if (file == NULL)
     {
-        printf("Erreur lors de l'ouverture du fichier\n");
+        fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", path);
         exit(1);
     }
-    int a = fread(net,sizeof(network),1,file);
-    if (a != 1)
-    {
-        printf("Erreur lors de la lecture du fichier\n");
-        exit(1);
-    }
+    
+    // Charger tous les poids et biais
+    fread(net->filter_1, sizeof(double), NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    fread(net->biais_1, sizeof(double), NB_FILTER_1, file);
+    fread(net->filter_2, sizeof(double), NB_FILTER_2 * NB_FILTER_1 * SIZE_FILTER * SIZE_FILTER, file);
+    fread(net->biais_2, sizeof(double), NB_FILTER_2, file);
+    fread(net->input_weight, sizeof(double), HIDDEN_SIZE * MLP_SIZE, file);
+    fread(net->input_biais, sizeof(double), HIDDEN_SIZE, file);
+    fread(net->hidden_weight, sizeof(double), OUTPUT_SIZE * HIDDEN_SIZE, file);
+    fread(net->hidden_biais, sizeof(double), OUTPUT_SIZE, file);
+    
     fclose(file);
+    printf("Network loaded from %s\n", path);
 }
 
-double** create_grid(char* path)
-{
-    double** input = calloc(81,sizeof(double*));
-    for (size_t i = 0; i < 9; i++)
-    {
-        for (size_t j = 0; j < 9; j++)
-        {
-            input[i*9+j] = malloc(784*sizeof(double));
-            char* path_image = malloc(100*sizeof(char));
-            sprintf(path_image,"%s/tile_%ld%ld.png",path,i,j);
-            image_to_array(path_image,input[i*9+j]);
-            free(path_image);
-        }
-    }
-    return input;
-}
-
-void write_grid(char* path, double** grid)
-{
-    FILE* file = fopen(path,"w");
-    if (file == NULL)
-    {
-        printf("Erreur lors de l'ouverture du fichier\n");
-        exit(1);
-    }
-    for (size_t i = 0; i < 9; i++)
-    {
-        for (size_t j = 0; j < 9; j++)
-        {
-            if (grid[i][j] == 0)
-            {
-                fprintf(file,".");
-            }
-            else
-            {
-                fprintf(file,"%ld",(size_t)grid[i][j]);
-            }
-            if (j == 2 || j == 5)
-            {
-                fprintf(file,"  ");
-            }
-            
-        }
-        fprintf(file,"\n");
-        if (i == 2 || i == 5)
-        {
-            fprintf(file,"\n");
-        }
-    }
-    fclose(file);
-}
-
-double** readGrid(network* net,double** grid)
-{
-    double** gridres = malloc(9*sizeof(double*));
-    for (size_t i = 0; i < 9; i++)
-    {
-        gridres[i] = malloc(9*sizeof(double));
-    }
-    for (size_t i = 0; i < 81; i++)
-    {
-        input_network(net,grid[i]);
-        forward_propagation(net);
-        double max = 0;
-        size_t index = 0;
-        for (size_t k = 0; k < 10; k++)
-        {
-            //printf("%f ",net.outputValues[k]);
-            if (net->outputValues[k] > max)
-            {
-                max = net->outputValues[k];
-                index = k;
-            }
-        }
-        //printf("\n");
-        gridres[i/9][i%9] = index;
-    }
-    return gridres;
-}
-
-void freeGrid(double** grid)
-{
-    for (size_t i = 0; i < 81; i++)
-    {
-        free(grid[i]);
-    }
-    free(grid);
-}
-
-void train_network(network* net, double** test)
-{
-    DIR* rep = opendir("network/digitreconizer/traindata1");
-    if (rep == NULL)
-    {
-        printf("Erreur lors de l'ouverture du dossier\n");
-        exit(1);
-    }
-    double acc = 0;
-    int epoch = 0;
-    while (acc < 1)
-    {
-        struct dirent* ent;
-        while ((ent = readdir(rep)) != NULL)
-        {
-            if (ent->d_name[0] != '.')
-            {
-                char* path_image = malloc(1024*sizeof(char));
-                sprintf(path_image,"network/digitreconizer/traindata1/%s",ent->d_name);
-                double target[10] = {0};
-                target[ent->d_name[0]-'0'] = 1;
-                double input[784];
-                image_to_array(path_image,input);
-                input_network(net,input);
-                backpropagation(net,target);
-                free(path_image);
-            }
-        }
-        rewinddir(rep);
-        
-        printf("Epoch : %d : ",epoch);
-        double nb_true = 0;
-        for(size_t k = 0; k < 10; k++) 
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                input_network(net,test[i+k*5]);
-                forward_propagation(net);
-                double max = 0;
-                for (size_t j = 0; j < 10; j++)
-                {
-                    if (net->outputValues[j] > max)
-                    {
-                        max = net->outputValues[j];
-                    }
-                }
-                if(max == net->outputValues[k])
-                {
-                    nb_true++;
-                }
-            }
-        }
-        acc = nb_true/50;
-        printf("Accuracy : %f \n", acc);
-        epoch++;
-    }
-    closedir(rep);
-}
-*/
 void free_Network(network* net)
 {
     free(net);
