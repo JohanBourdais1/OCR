@@ -588,7 +588,7 @@ void test_on10(network *n)
     for (int i = 0; i < 10; i++)
     {
         char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
-        snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/%d.png", i);
+        snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/mnist_png/%d.png", i);
         printf("%s\n", full_name);
         n->inputValues = create_Input(full_name);
         double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
