@@ -352,6 +352,41 @@ double* create_Input_inverted(char* path)
     return input;
 }
 
+// Crop image by removing padding from all sides
+SDL_Surface* crop_image(SDL_Surface* image)
+{
+    if (image == NULL) return NULL;
+    
+    int width = image->w;
+    int height = image->h;
+    
+    // Instead of cropping, fill borders with black to remove noise
+    int border = 10;  // 10 pixels border to paint white
+    
+    SDL_LockSurface(image);
+    Uint32* pixels = (Uint32*)image->pixels;
+    
+    // Fill top and bottom borders
+    for (int y = 0; y < border; y++) {
+        for (int x = 0; x < width; x++) {
+            pixels[y * width + x] = SDL_MapRGB(image->format, 255, 255, 255);  // Top
+            pixels[(height - 1 - y) * width + x] = SDL_MapRGB(image->format, 255, 255, 255);  // Bottom
+        }
+    }
+    
+    // Fill left and right borders
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < border; x++) {
+            pixels[y * width + x] = SDL_MapRGB(image->format, 255, 255, 255);  // Left
+            pixels[y * width + (width - 1 - x)] = SDL_MapRGB(image->format, 255, 255, 255);  // Right
+        }
+    }
+    
+    SDL_UnlockSurface(image);
+    
+    return image;
+}
+
 int image_to_array(char* path, double** array)
 {
     double* input = *array;
@@ -409,6 +444,19 @@ int image_to_array_inverted(char* path, double** array)
         return -1;
     }
     
+    // Save original image for debug
+    IMG_SavePNG(image, "debug/debug_original.png");
+    
+    // Crop the image to remove white borders
+    SDL_Surface* cropped = crop_image(image);
+    if (cropped != image) {
+        SDL_FreeSurface(image);
+        image = cropped;
+    }
+    
+    // Save cropped image for debug
+    IMG_SavePNG(image, "debug/debug_cropped.png");
+    
     SDL_Surface* resized = SDL_CreateRGBSurface(0, 28, 28, 32, 0, 0, 0, 0);
     if (resized == NULL) {
         fprintf(stderr, "SDL_CreateRGBSurface failed: %s\n", SDL_GetError());
@@ -419,15 +467,49 @@ int image_to_array_inverted(char* path, double** array)
     SDL_BlitScaled(image, NULL, resized, NULL);
     SDL_FreeSurface(image);
     
+    // Save resized image for debug
+    IMG_SavePNG(resized, "debug/debug_resized.png");
+    
     SDL_LockSurface(resized);
+    
     Uint8 r, g, b;
-    Uint32* pixels = resized->pixels;
+    Uint32* pixels_rgb = resized->pixels;
+    Uint8 gray_data[784];
+    
     for (size_t i = 0; i < 784; i++) {
-        SDL_GetRGB(pixels[i], resized->format, &r, &g, &b);
-        // Invert the colors: black becomes white, white becomes black
-        input[i] = 1.0 - (double)(r + g + b) / 3.0 / 255.0;
+        SDL_GetRGB(pixels_rgb[i], resized->format, &r, &g, &b);
+        // Convert to grayscale
+        Uint8 gray = (r + g + b) / 3;
+        // Invert: black becomes white, white becomes black
+        gray = 255 - gray;
+        
+        // No thresholding - keep gradient information like MNIST
+        // Just a very low threshold to remove noise floor
+        gray = (gray < 30) ? 0 : gray;
+        
+        gray_data[i] = gray;
+        // Normalize to [0, 1] for neural network
+        input[i] = (double)gray / 255.0;
     }
+    
     SDL_UnlockSurface(resized);
+    
+    // Save inverted grayscale image as png for debug
+    SDL_Surface* debug_surface = SDL_CreateRGBSurface(0, 28, 28, 32, 0, 0, 0, 0);
+    if (debug_surface != NULL) {
+        SDL_LockSurface(debug_surface);
+        Uint32* debug_pixels = debug_surface->pixels;
+        for (size_t i = 0; i < 784; i++) {
+            Uint8 gray = gray_data[i];
+            debug_pixels[i] = SDL_MapRGB(debug_surface->format, gray, gray, gray);
+        }
+        SDL_UnlockSurface(debug_surface);
+        char array[256];
+        sprintf(array, "debug/debug_inverted%c%c.png", path[10], path[11]);
+        IMG_SavePNG(debug_surface, array);
+        SDL_FreeSurface(debug_surface);
+    }
+    
     SDL_FreeSurface(resized);
     
     return 0;
@@ -534,7 +616,7 @@ int is_empty_cell(const char *path) {
     printf("Cell %s: dark_ratio = %.2f%% (%d/%d dark pixels)\n", 
            path, dark_ratio * 100, dark_pixels, center_pixels);
     
-    return (dark_ratio < 0.03) ? 1 : 0;
+    return (dark_ratio < 0.3) ? 1 : 0;
 }
 
 void save_network(char* path, network* net)
@@ -588,7 +670,7 @@ void test_on10(network *n)
     for (int i = 0; i < 10; i++)
     {
         char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
-        snprintf(full_name, MAX_FILE_NAME_SIZE, "network/digitreconizer/data/mnist_png/%d.png", i);
+        snprintf(full_name, MAX_FILE_NAME_SIZE, "../data/mnist_png/%d.png", i);
         printf("%s\n", full_name);
         n->inputValues = create_Input(full_name);
         double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
@@ -631,34 +713,34 @@ int Test(network *n, char *path, int digit)
                     switch (entry->d_name[0] - '0')
                     {
                         case 0:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 980);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 1:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1135);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 2:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1032);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 3:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1010);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 4:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 982);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 5:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 892);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 6:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 958);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 7:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1028);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 8:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 974);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                         case 9:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1009);
+                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
                             break;
                     }
                     
@@ -717,21 +799,12 @@ void create_grid(network *n, char *path)
     struct dirent* entry = NULL;
         while ((entry = readdir(directory)) != NULL) {
             char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
-            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
+            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s%s", path, entry->d_name);
 
             if (entry->d_type == DT_DIR) {
                 free(full_name);
             } else {
                 if (!is_image_file(entry->d_name)) {
-                    free(full_name);
-                    continue;
-                }
-                
-                // Check if the cell is empty before processing
-                if (is_empty_cell(full_name)) {
-                    // Empty cell - set to 0
-                    grid[entry->d_name[5]-'0'][entry->d_name[6]-'0'] = 0;
-                    printf("Empty cell detected at [%c][%c]\n", entry->d_name[5], entry->d_name[6]);
                     free(full_name);
                     continue;
                 }
@@ -751,6 +824,7 @@ void create_grid(network *n, char *path)
                 {
                     if(n->outputValues[i] > n->outputValues[pred]) pred = i;
                 }
+                printf("Predicted digit for cell [%c][%c]: %f\n", entry->d_name[5], entry->d_name[6], n->outputValues[pred]);
                 grid[entry->d_name[5]-'0'][entry->d_name[6]-'0'] = pred;
                 printf("Digit %d detected at [%c][%c]\n", pred, entry->d_name[5], entry->d_name[6]);
                 free(output_filter_2);
@@ -786,7 +860,7 @@ void create_grid(network *n, char *path)
 void train(network *n, char *path)
 {
     double lr = 0.0006f;  // Slightly reduced from 0.0007
-    int max_iterations = 60000;
+    int max_iterations = 100000;
     DIR* directory = opendir(path);
     if (directory == NULL) {
         fprintf(stderr, "Can't open %s\n", path);
@@ -890,6 +964,7 @@ void train(network *n, char *path)
                 double current_lr = lr;
                 if (e > 30000) current_lr = lr * 0.5;
                 if (e > 40000) current_lr = lr * 0.2;
+                if (e > 70000) current_lr = lr * 0.1;
 
                 // Update weights with L2 regularization
                 apply_l2_regularization(n->filter_1, dconv1_w, (size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER, current_lr, L2_LAMBDA);

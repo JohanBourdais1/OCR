@@ -12,16 +12,16 @@ int main(int argc, char *argv[])
         load_network("network/digitreconizer/network_trained.dat", n);
         
         printf("\n=== Testing on sample images ===\n");
-        Test(n, "network/digitreconizer/data/mnist_png/test", 0);
-        test_on10(n);
+        Test(n, "../data/pythonData/test", 0);
+        //test_on10(n);
     } else if (argc > 1 && strcmp(argv[1], "--save") == 0) {
         printf("Starting fresh training...\n");
-        train(n, "network/digitreconizer/data/mnist_png/train");
+        train(n, "../data/pythonData/train");
         printf("\n=== Saving trained network ===\n");
         save_network("network/digitreconizer/network_trained.dat", n);
         printf("\n=== Testing on sample images ===\n");
-        Test(n, "network/digitreconizer/data/mnist_png/test", 0);
-        test_on10(n);
+        Test(n, "../data/pythonData/test", 0);
+        //test_on10(n);
     } else if (argc > 1 && strcmp(argv[1], "--ui") == 0) {
         printf("Loading existing network...\n");
         load_network("network/digitreconizer/network_trained.dat", n);
@@ -29,10 +29,10 @@ int main(int argc, char *argv[])
     }
     else {
         printf("Starting fresh training...\n");
-        train(n, "network/digitreconizer/data/mnist_png/train");
+        train(n, "../data/pythonData/train");
         printf("\n=== Testing on sample images ===\n");
-        Test(n, "network/digitreconizer/data/mnist_png/test", 0);
-        test_on10(n);
+        Test(n, "../data/pythonData/test", 0);
+        //test_on10(n);
     }
     
     free_Network(n);
