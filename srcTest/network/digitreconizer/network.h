@@ -20,6 +20,8 @@
 #define MLP_SIZE 800    // Adapter car 32 filtres × 5×5 = 800
 #define HIDDEN_SIZE 256  // Augmenter de 128 à 256 pour plus de capacité
 #define OUTPUT_SIZE 10
+#define MAX_FILE_NAME_SIZE 1024
+#define L2_LAMBDA 0.00005  // L2 regularization coefficient (reduced)
 
 typedef struct network
 {
@@ -40,7 +42,7 @@ network* init_network();
 
 void reLU(size_t nb_out, size_t input_size, double* out);
 
-void apply_conv(network* net, int size, size_t nb_out,
+void apply_conv(int size, size_t nb_out,
                 double* filter, double* input, double* biais, double *conv_out);
                 
 double* maxPool(double* input, int size, size_t nb_out);
@@ -64,9 +66,15 @@ void conv2d_valid_backward(const double *in, int H_in, int W_in, int C_in,
                                   const double *w, int Kk,
                                   double *dW, double *db, double *din);
 
-int image_to_array(char* path,double** array);
+void apply_l2_regularization(double* weights, double* grad_weights, size_t size, double lr, double lambda);
+
+int image_to_array(char* path, double** array);
+
+int image_to_array_inverted(char* path, double** array);
 
 double* create_Input(char* path);
+
+double* create_Input_inverted(char* path);
 
 void resize_image(char* path);
 
@@ -86,3 +94,5 @@ void train(network *n, char *path);
 int Test(network *n, char *path, int digit);
 void test_on10(network *n);
 int is_image_file(const char *filename);
+int is_empty_cell(const char *path);
+void create_grid(network *n, char *path);

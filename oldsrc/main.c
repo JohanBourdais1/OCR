@@ -166,7 +166,7 @@ void pretraitement(int argc,char *argv[])
     // - rotation
      if(argc == 2)
     {
-	    	SDL_Surface* source = IMG_Load("carving/ready_canny.png");
+	    SDL_Surface* source = IMG_Load("carving/ready_canny.png");
 		SDL_Point Points[4];
 		SDL_Point intersection[10][10];
 		carve2(source,Points,intersection);

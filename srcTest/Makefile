@@ -3,13 +3,16 @@
 # Compiler
 CC = gcc
 
+# ASAN configuration
+export ASAN_OPTIONS=suppressions=asan_suppressions.txt:allocator_may_return_null=1:halt_on_error=0
+
 # Compiler flags
-CFLAGS = -Wall -Wextra -O2 -g `pkg-config --cflags gtk+-3.0` -g
+CFLAGS = -Wall -Wextra -O0 -g `pkg-config --cflags gtk+-3.0` -fsanitize=address -fno-omit-frame-pointer
 LDFLAGS = `pkg-config --libs gtk+-3.0`
 LDLIBS = -lSDL2 -lSDL2_image -lm -fsanitize=address
 
 # Source files
-SOURCES = main.c network/digitreconizer/network.c
+SOURCES = main.c network/digitreconizer/network.c UI/UI.c pretraitement/pre.c canny/canny_edge.c canny/hysteresis.c canny/pgm_io.c carving/carving.c solver/sudoku.c
 
 # Object files
 OBJECTS = $(SOURCES:.c=.o)
@@ -51,4 +54,9 @@ clean:
 	rm -f UI/UI.o
 	rm -f main
 	rm -f network/digitreconizer/network1.txt
+	rm -rf grid/
+	rm -f border.png
+	rm -f ../assets/ready.pgm
+	rm -f sudoku_grid.txt
+	rm -f solver/sudoku_solution.txt
 

@@ -59,6 +59,7 @@ network* init_network()
     {
         net->hidden_biais[i] = 0.0;
     }
+    
     return net;
 }
 
@@ -100,7 +101,7 @@ double* maxPool(double* input, int size, size_t nb_out)
     return out;
 }
 
-void apply_conv(network* net, int size, size_t nb_out,
+void apply_conv(int size, size_t nb_out,
                 double* filter, double* input, double* biais, double *conv_out)
 {
     int out_size = size - 2;
@@ -141,7 +142,6 @@ void dense_reLU(network* net, double* input)
     }
 }
 
-// Second dense layer: hiddenValues -> logits (before softmax)
 void dense_logits(network* net)
 {
     for (size_t i = 0; i < (size_t)OUTPUT_SIZE; i++)
@@ -155,29 +155,23 @@ void dense_logits(network* net)
     }
 }
 
-// Apply softmax to logits
 void dense_softmax(network *net) {
-    // First clip and handle NaN/Inf
     for (int i = 0; i < OUTPUT_SIZE; ++i) {
         double v = net->outputValues[i];
         if (isnan(v) || isinf(v)) net->outputValues[i] = 0.0;
-        // Clip extreme values before exp
         if (net->outputValues[i] > 700.0) net->outputValues[i] = 700.0;
         if (net->outputValues[i] < -700.0) net->outputValues[i] = -700.0;
     }
 
-    // Subtract max for numerical stability
     double max = net->outputValues[0];
     for (int i = 1; i < OUTPUT_SIZE; ++i) if (net->outputValues[i] > max) max = net->outputValues[i];
 
-    // Compute softmax
     double sum = 0.0;
     for (int i = 0; i < OUTPUT_SIZE; ++i) {
         net->outputValues[i] = exp(net->outputValues[i] - max);
         sum += net->outputValues[i];
     }
     
-    // Normalize
     if (sum < 1e-12) sum = 1e-12;
     for (int i = 0; i < OUTPUT_SIZE; ++i) net->outputValues[i] /= sum;
 }
@@ -333,6 +327,31 @@ double* create_Input(char* path)
     return input;
 }
 
+double* create_Input_inverted(char* path)
+{
+    double* input = malloc(784 * sizeof(double));
+    if (input == NULL) {
+        fprintf(stderr, "Memory allocation failed for input\n");
+        return NULL;
+    }
+    
+    FILE *test = fopen(path, "r");
+    if (test == NULL) {
+        fprintf(stderr, "File not found: %s\n", path);
+        free(input);
+        return NULL;
+    }
+    fclose(test);
+    
+    if (image_to_array_inverted(path, &input) != 0) {
+        fprintf(stderr, "Failed to convert image: %s\n", path);
+        free(input);
+        return NULL;
+    }
+    
+    return input;
+}
+
 int image_to_array(char* path, double** array)
 {
     double* input = *array;
@@ -366,6 +385,47 @@ int image_to_array(char* path, double** array)
     for (size_t i = 0; i < 784; i++) {
         SDL_GetRGB(pixels[i], resized->format, &r, &g, &b);
         input[i] = (double)(r + g + b) / 3.0 / 255.0;
+    }
+    SDL_UnlockSurface(resized);
+    SDL_FreeSurface(resized);
+    
+    return 0;
+}
+
+int image_to_array_inverted(char* path, double** array)
+{
+    double* input = *array;
+    
+    SDL_Surface* s = IMG_Load(path);
+    if (s == NULL) {
+        fprintf(stderr, "IMG_Load failed for %s: %s\n", path, SDL_GetError());
+        return -1;
+    }
+    
+    SDL_Surface *image = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB888, 0);
+    SDL_FreeSurface(s);
+    if (image == NULL) {
+        fprintf(stderr, "SDL_ConvertSurfaceFormat failed: %s\n", SDL_GetError());
+        return -1;
+    }
+    
+    SDL_Surface* resized = SDL_CreateRGBSurface(0, 28, 28, 32, 0, 0, 0, 0);
+    if (resized == NULL) {
+        fprintf(stderr, "SDL_CreateRGBSurface failed: %s\n", SDL_GetError());
+        SDL_FreeSurface(image);
+        return -1;
+    }
+    
+    SDL_BlitScaled(image, NULL, resized, NULL);
+    SDL_FreeSurface(image);
+    
+    SDL_LockSurface(resized);
+    Uint8 r, g, b;
+    Uint32* pixels = resized->pixels;
+    for (size_t i = 0; i < 784; i++) {
+        SDL_GetRGB(pixels[i], resized->format, &r, &g, &b);
+        // Invert the colors: black becomes white, white becomes black
+        input[i] = 1.0 - (double)(r + g + b) / 3.0 / 255.0;
     }
     SDL_UnlockSurface(resized);
     SDL_FreeSurface(resized);
@@ -415,6 +475,66 @@ int is_image_file(const char *filename) {
             strcmp(ext, ".JPG") == 0 ||
             strcmp(ext, ".bmp") == 0 ||
             strcmp(ext, ".BMP") == 0);
+}
+
+// Check if a cell image is empty (mostly white pixels)
+int is_empty_cell(const char *path) {
+    SDL_Surface* s = IMG_Load(path);
+    if (s == NULL) {
+        fprintf(stderr, "IMG_Load failed for %s: %s\n", path, SDL_GetError());
+        return 1; // Consider it empty if we can't load it
+    }
+    
+    SDL_Surface *image = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB888, 0);
+    SDL_FreeSurface(s);
+    if (image == NULL) {
+        fprintf(stderr, "SDL_ConvertSurfaceFormat failed: %s\n", SDL_GetError());
+        return 1;
+    }
+    
+    SDL_LockSurface(image);
+    Uint8 r, g, b;
+    Uint32* pixels = image->pixels;
+    int width = image->w;
+    int height = image->h;
+    
+    // Define the center region (ignore borders)
+    int margin_x = width / 5;   // Ignore 20% on each side
+    int margin_y = height / 5;  // Ignore 20% on top and bottom
+    int start_x = margin_x;
+    int end_x = width - margin_x;
+    int start_y = margin_y;
+    int end_y = height - margin_y;
+    
+    int center_pixels = 0;
+    int dark_pixels = 0;
+    
+    // Count dark pixels in the center region (where a digit would be)
+    for (int y = start_y; y < end_y; y++) {
+        for (int x = start_x; x < end_x; x++) {
+            int index = y * width + x;
+            SDL_GetRGB(pixels[index], image->format, &r, &g, &b);
+            int avg = (r + g + b) / 3;
+            center_pixels++;
+            // Consider a pixel dark if average is < 128
+            if (avg < 128) {
+                dark_pixels++;
+            }
+        }
+    }
+    
+    SDL_UnlockSurface(image);
+    SDL_FreeSurface(image);
+    
+    // If less than 5% of center pixels are dark, consider the cell empty
+    if (center_pixels == 0) return 1;
+    double dark_ratio = (double)dark_pixels / (double)center_pixels;
+    
+    // Debug output
+    printf("Cell %s: dark_ratio = %.2f%% (%d/%d dark pixels)\n", 
+           path, dark_ratio * 100, dark_pixels, center_pixels);
+    
+    return (dark_ratio < 0.03) ? 1 : 0;
 }
 
 void save_network(char* path, network* net)
@@ -473,9 +593,9 @@ void test_on10(network *n)
         n->inputValues = create_Input(full_name);
         double *conv1_out = calloc(NB_FILTER_1 * (SIZE - 2) * (SIZE - 2), sizeof(double));
         double *conv2_out = calloc(NB_FILTER_2 * (SIZE - 2) / 2 * (SIZE - 2) / 2, sizeof(double));;
-        apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+        apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
         double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
-        apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+        apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
         double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
         dense_reLU(n, output_filter_2);
         
@@ -552,9 +672,9 @@ int Test(network *n, char *path, int digit)
                 n->inputValues = create_Input(full_name);
                 double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
                 double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
-                apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+                apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
                 double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
-                apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+                apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
                 double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
                 dense_reLU(n, output_filter_2);
                 dense_logits(n);
@@ -578,9 +698,94 @@ int Test(network *n, char *path, int digit)
     return res;
 }
 
+// L2 regularization update
+void apply_l2_regularization(double* weights, double* grad_weights, size_t size, double lr, double lambda)
+{
+    for (size_t i = 0; i < size; i++) {
+        weights[i] -= lr * (grad_weights[i] + lambda * weights[i]);
+    }
+}
+
+void create_grid(network *n, char *path)
+{
+    DIR* directory = opendir(path);
+    if (directory == NULL) {
+        fprintf(stderr, "Can't open %s\n", path);
+        return;
+    }
+    int grid[9][9] = {0};
+    struct dirent* entry = NULL;
+        while ((entry = readdir(directory)) != NULL) {
+            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
+
+            if (entry->d_type == DT_DIR) {
+                free(full_name);
+            } else {
+                if (!is_image_file(entry->d_name)) {
+                    free(full_name);
+                    continue;
+                }
+                
+                // Check if the cell is empty before processing
+                if (is_empty_cell(full_name)) {
+                    // Empty cell - set to 0
+                    grid[entry->d_name[5]-'0'][entry->d_name[6]-'0'] = 0;
+                    printf("Empty cell detected at [%c][%c]\n", entry->d_name[5], entry->d_name[6]);
+                    free(full_name);
+                    continue;
+                }
+                
+                n->inputValues = create_Input_inverted(full_name);
+                double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
+                double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
+                apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+                double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+                apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+                double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+                dense_reLU(n, output_filter_2);
+                dense_logits(n);
+                dense_softmax(n);
+                int pred = 0;
+                for(int i=1;i<OUTPUT_SIZE;i++) 
+                {
+                    if(n->outputValues[i] > n->outputValues[pred]) pred = i;
+                }
+                grid[entry->d_name[5]-'0'][entry->d_name[6]-'0'] = pred;
+                printf("Digit %d detected at [%c][%c]\n", pred, entry->d_name[5], entry->d_name[6]);
+                free(output_filter_2);
+                free(full_name);
+                free(output_filter_1);
+                free(conv2_out);
+                free(conv1_out);
+                free(n->inputValues);
+            }
+        }
+        closedir(directory);
+
+        FILE *output_file = fopen("sudoku_grid.txt", "w");
+        if (output_file == NULL) {
+            fprintf(stderr, "Error opening output file\n");
+            return;
+        }
+        for (int i = 0; i < 9; i++) {
+            if (i != 0 && i % 3 == 0) {
+                fprintf(output_file, "\n");
+            }
+            for (int j = 0; j < 9; j++) {
+                if (j != 0 && j % 3 == 0) {
+                    fprintf(output_file, " ");
+                }
+                fprintf(output_file, "%d", grid[i][j]);
+            }
+            fprintf(output_file, "\n");
+        }
+        fclose(output_file);
+}
+
 void train(network *n, char *path)
 {
-    double lr = 0.0007f;
+    double lr = 0.0006f;  // Slightly reduced from 0.0007
     int max_iterations = 60000;
     DIR* directory = opendir(path);
     if (directory == NULL) {
@@ -625,10 +830,10 @@ void train(network *n, char *path)
                 memset(ddense2_b, 0, (size_t)OUTPUT_SIZE * sizeof(double));
                 double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
                 double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
-                apply_conv(n, SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+                apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
                 double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
 
-                apply_conv(n, 13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+                apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
                 double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
 
                 dense_reLU(n, output_filter_2);
@@ -686,17 +891,14 @@ void train(network *n, char *path)
                 if (e > 30000) current_lr = lr * 0.5;
                 if (e > 40000) current_lr = lr * 0.2;
 
-                for(size_t i=0;i<(size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_1[i] -= current_lr * dconv1_w[i];
+                // Update weights with L2 regularization
+                apply_l2_regularization(n->filter_1, dconv1_w, (size_t)NB_FILTER_1*1*SIZE_FILTER*SIZE_FILTER, current_lr, L2_LAMBDA);
                 for(size_t i=0;i<(size_t)NB_FILTER_1;i++) n->biais_1[i] -= current_lr * dconv1_b[i];
-                for(size_t i=0;i<(size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER;i++) n->filter_2[i] -= current_lr * dconv2_w[i];
+                apply_l2_regularization(n->filter_2, dconv2_w, (size_t)NB_FILTER_2*NB_FILTER_1*SIZE_FILTER*SIZE_FILTER, current_lr, L2_LAMBDA);
                 for(size_t i=0;i<(size_t)NB_FILTER_2;i++) n->biais_2[i] -= current_lr * dconv2_b[i];
-                for(size_t i=0;i<(size_t)HIDDEN_SIZE * MLP_SIZE;i++) {
-                    n->input_weight[i] -= current_lr * ddense1_w[i];
-                }
+                apply_l2_regularization(n->input_weight, ddense1_w, (size_t)HIDDEN_SIZE * MLP_SIZE, current_lr, L2_LAMBDA);
                 for(size_t i=0;i<(size_t)HIDDEN_SIZE;i++) n->input_biais[i] -= current_lr * ddense1_b[i];
-                for(size_t i = 0; i < (size_t)OUTPUT_SIZE * HIDDEN_SIZE; i++) {
-                    n->hidden_weight[i] -= current_lr * ddense2_w[i];
-                }
+                apply_l2_regularization(n->hidden_weight, ddense2_w, (size_t)OUTPUT_SIZE * HIDDEN_SIZE, current_lr, L2_LAMBDA);
                 for(size_t i=0;i<(size_t)OUTPUT_SIZE;i++) n->hidden_biais[i] -= current_lr * ddense2_b[i];
 
                 free(dconv1_out);

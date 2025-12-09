@@ -1,0 +1,5 @@
+leak:libfontconfig.so.1
+leak:libpango-1.0.so.0
+leak:libpangoft2-1.0.so.0
+leak:libgtk-3.so.0
+leak:FcValueSave
