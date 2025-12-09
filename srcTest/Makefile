@@ -59,4 +59,4 @@ clean:
 	rm -f ../assets/ready.pgm
 	rm -f sudoku_grid.txt
 	rm -f solver/sudoku_solution.txt
-
+	rm -f debug/*
