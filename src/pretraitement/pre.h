@@ -1,13 +1,11 @@
 #ifndef PRE_H
 #define PRE_H
 
-
 #include <math.h>
 #include <err.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include "../carving/carving.h"
-
 
 SDL_Surface* rotateSurface(SDL_Surface* surface, double angle);
 
@@ -24,7 +22,7 @@ int threshold(SDL_Surface* surface,SDL_PixelFormat* format);
 
 void surface_to_black_and_white(SDL_Surface* surface);
 
-void carve2(SDL_Surface* source,SDL_Point* Points,SDL_Point[10][10]);
+void carve2(SDL_Surface* source,SDL_Point* Points);
 
 void surface_to_grayscale(SDL_Surface* surface);
 

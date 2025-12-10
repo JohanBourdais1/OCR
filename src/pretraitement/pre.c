@@ -164,39 +164,56 @@ void surface_to_grayscale(SDL_Surface* surface)
 
 void contrast_streching(SDL_Surface* surface)
 {
-    if (surface == NULL || surface->format->BytesPerPixel != 3) {
-        // Gère les cas où la surface n'est pas valide ou n'est pas au format RGB888
+    if (surface == NULL) {
+        return;
+    }
+    
+    int bpp = surface->format->BytesPerPixel;
+    
+    // Support both 3 bytes (RGB) and 4 bytes (RGBX/RGB888) per pixel
+    if (bpp != 3 && bpp != 4) {
         return;
     }
 
-    Uint8 *pixels = (Uint8*)surface->pixels;
+    SDL_LockSurface(surface);
+    
+    Uint32* pixels = (Uint32*)surface->pixels;
+    SDL_PixelFormat* format = surface->format;
+    
     Uint8 minPixelValue = 255;
     Uint8 maxPixelValue = 0;
 
     // Trouver les valeurs minimale et maximale des composantes RGB dans l'image
-    for (int i = 0; i < surface->w * surface->h * 3; i += 3) {
-        Uint8 pixelValue = pixels[i];
-        if (pixelValue < minPixelValue) {
-            minPixelValue = pixelValue;
+    int len = surface->w * surface->h;
+    for (int i = 0; i < len; i++) {
+        Uint8 r, g, b;
+        SDL_GetRGB(pixels[i], format, &r, &g, &b);
+        Uint8 gray = (r + g + b) / 3;
+        if (gray < minPixelValue) {
+            minPixelValue = gray;
         }
-        if (pixelValue > maxPixelValue) {
-            maxPixelValue = pixelValue;
+        if (gray > maxPixelValue) {
+            maxPixelValue = gray;
         }
+    }
+
+    // Avoid division by zero
+    if (maxPixelValue == minPixelValue) {
+        SDL_UnlockSurface(surface);
+        return;
     }
 
     // Appliquer l'étirement de contraste
-    for (int i = 0; i < surface->w * surface->h * 3; i += 3) {
-        Uint8 pixelValue = pixels[i];
-        Uint8 newValue = (Uint8)(((pixelValue - minPixelValue) * 255) / (maxPixelValue - minPixelValue));
+    for (int i = 0; i < len; i++) {
+        Uint8 r, g, b;
+        SDL_GetRGB(pixels[i], format, &r, &g, &b);
+        Uint8 gray = (r + g + b) / 3;
+        Uint8 newValue = (Uint8)(((gray - minPixelValue) * 255) / (maxPixelValue - minPixelValue));
 
-        // Assurer que les nouvelles valeurs restent dans la plage de 0 à 255
-        //newValue = (newValue > 255) ? 255 : newValue;
-	//newValue = (newValue < 0) ? 0 : newValue;
-
-        pixels[i] = newValue;
-        pixels[i + 1] = newValue;
-        pixels[i + 2] = newValue;
+        pixels[i] = SDL_MapRGB(format, newValue, newValue, newValue);
     }
+    
+    SDL_UnlockSurface(surface);
 }
 
 void surface_to_black_and_white(SDL_Surface* surface)
@@ -263,7 +280,7 @@ SDL_Surface* padding2(SDL_Surface* source, int padding)
     return padded;
 }
 
-void carve2(SDL_Surface* source,SDL_Point* Points,SDL_Point intersections[10][10])
+void carve2(SDL_Surface* source,SDL_Point* Points)
 {
 
     int padd = 250;
@@ -544,4 +561,3 @@ void carve2(SDL_Surface* source,SDL_Point* Points,SDL_Point intersections[10][10
 
     SDL_FreeSurface(source);
 }
-

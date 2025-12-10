@@ -8,12 +8,12 @@ int isValid(int** grid, int row, int col, int num)
     int i,j;
     for(i=0;i<9;i++)
     {
-        if(grid[row][i]==num & i!=col)
+        if(grid[row][i]==num && i!=col)
             return 0;
     }
     for(i=0;i<9;i++)
     {
-        if(grid[i][col]==num & i!=row)
+        if(grid[i][col]==num && i!=row)
             return 0;
     }
     int rowStart = row - row % 3;
@@ -174,7 +174,7 @@ int** readGridFromFile(char* path)
                 fclose(file);
                 errx(1,"Erreur : Le fichier n'a pas le bon format.\n");
             }
-            if (character == '.') 
+            if (character == '0') 
             {
                 grid[i][j] = 0;
             } else if (character >= '1' && character <= '9') 
@@ -345,7 +345,7 @@ void recreateGrid(int** grid , int oldGrid[9][9])
         position.y+=28;
     }
     SDL_Surface* image = doubleSizeImage(img);
-    SDL_SaveBMP(image, "solver/grid.png");
+    IMG_SavePNG(image, "solver/grid.png");
     SDL_FreeSurface(img);
     SDL_FreeSurface(image);
 }

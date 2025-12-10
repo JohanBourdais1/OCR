@@ -94,3 +94,5 @@ void train(network *n, char *path);
 int Test(network *n, char *path, int digit);
 void test_on10(network *n);
 int is_image_file(const char *filename);
+int is_empty_cell(const char *path);
+void create_grid(network *n, char *path);
