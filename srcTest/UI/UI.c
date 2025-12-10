@@ -137,13 +137,36 @@ static void on_crop_clicked(GtkButton *button __attribute__((unused)), UIWidgets
         
         gtk_image_set_from_pixbuf(widgets->image_display, cropped);
         
+        // Save the cropped image to a file for use in pretreatment
+        const char *cropped_filename = "cropped_image.png";
+        GError *error = NULL;
+        gboolean saved = gdk_pixbuf_save(widgets->original_pixbuf, cropped_filename, "png", &error, NULL);
+        
+        if (saved) {
+            // Update current_filename to point to the cropped image
+            if (widgets->current_filename != NULL) {
+                g_free(widgets->current_filename);
+            }
+            widgets->current_filename = g_strdup(cropped_filename);
+            gtk_label_set_text(widgets->filename_label, cropped_filename);
+        } else {
+            if (error != NULL) {
+                gchar *err_msg = g_strdup_printf("Failed to save cropped image: %s", error->message);
+                gtk_label_set_text(widgets->status_label, err_msg);
+                g_free(err_msg);
+                g_error_free(error);
+            }
+            g_object_unref(cropped);
+            return;
+        }
+        
         // Reset sliders
         gtk_adjustment_set_value(widgets->crop_top, 0);
         gtk_adjustment_set_value(widgets->crop_bottom, 0);
         gtk_adjustment_set_value(widgets->crop_left, 0);
         gtk_adjustment_set_value(widgets->crop_right, 0);
         
-        gchar *msg = g_strdup_printf("Image cropped to %dx%d", new_width, new_height);
+        gchar *msg = g_strdup_printf("Image cropped to %dx%d and saved", new_width, new_height);
         gtk_label_set_text(widgets->status_label, msg);
         g_free(msg);
         g_object_unref(cropped);
@@ -390,6 +413,9 @@ static int convert_pgm_to_png(const char *pgm_file, const char *png_file)
 
 static void on_pretreatment_clicked(GtkButton *button __attribute__((unused)), UIWidgets *widgets)
 {
+    // First apply crop
+    on_crop_clicked(NULL, widgets);
+    
     if (widgets->current_filename == NULL) {
         gtk_label_set_text(widgets->status_label, "No image loaded");
         return;
@@ -456,27 +482,29 @@ static void on_pretreatment_clicked(GtkButton *button __attribute__((unused)), U
     // - rotation
 	SDL_Surface* source = IMG_Load("carving/ready_canny.png");
 	SDL_Point Points[4];
-	SDL_Point intersection[10][10];
-	carve2(source,Points,intersection);
+	carve2(source,Points);
 	SDL_Point tl = Points[0];
 	SDL_Point tr = Points[1];
 	SDL_Point bl = Points[2];
 	SDL_Point br = Points[3];
 	angle = 90.0 - angle_detection(tl.x,tl.y,tr.x,tr.y,bl.x,bl.y,br.x,br.y);
 
-    // - grayscal
+    // - grayscale
     surface_to_grayscale(surface);
-    // - cantrast
+    // - contrast
     contrast_streching(surface);
-
-    SDL_Surface* rotated_surface =
-    rotateImage(surface, 360 - fmod(angle,360.0));
+    // - black and white (apply BEFORE rotation on RGB888 surface)
     surface_to_black_and_white(surface);
-    IMG_SavePNG(rotated_surface,"carving/ready.png");
-    // - Free the surface.
-    SDL_FreeSurface(surface);
-    SDL_FreeSurface(rotated_surface);
-    // - Destroy thif (SDL_Init(SDL_INIT_VIDEO) != 0)
+
+    // - rotation
+    /*SDL_Surface* rotated_surface =
+        rotateImage(surface, 360 - fmod(angle,360.0));*/
+    
+    IMG_SavePNG(surface,"carving/ready.png");
+    // - Free the surfaces
+    // Note: surface is freed inside rotateImage()
+    //SDL_FreeSurface(rotated_surface);
+    // - Destroy SDL
     SDL_Quit();
     
     // Load and display the two resulting images
@@ -499,6 +527,9 @@ static void on_pretreatment_clicked(GtkButton *button __attribute__((unused)), U
 
 static void on_grid_cutting_clicked(GtkButton *button __attribute__((unused)), UIWidgets *widgets)
 {
+    // First apply pretreatment (which also applies crop)
+    on_pretreatment_clicked(NULL, widgets);
+    
     gtk_label_set_text(widgets->status_label, "Cutting grid...");
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         errx(EXIT_FAILURE, "%s", SDL_GetError());
@@ -549,6 +580,7 @@ static void on_grid_cutting_clicked(GtkButton *button __attribute__((unused)), U
 
 static void on_solve_clicked(GtkButton *button __attribute__((unused)), UIWidgets *widgets)
 {
+    on_grid_cutting_clicked(NULL, widgets);
     gtk_label_set_text(widgets->status_label, "Solving sudoku...");
     create_grid(widgets->net, "grid/");
     int **grid = readGridFromFile("sudoku_grid.txt");

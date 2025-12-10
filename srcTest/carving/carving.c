@@ -506,13 +506,11 @@ SDL_Surface* carve(SDL_Surface* source, SDL_Point intersections[][10])
     // Structure of the grid
     IMG_SavePNG(vectt, "border.png");
 
-    // Intersection points (i : line, j : column)
-    for (int j = 0; j < 10; j++) {
-        for (int i = 0; i < 10; i++) {
-            intersections[i][j].x = tl.x + (int)((i / 9.0) *
-                    (bl.x - tl.x)) + (int)((j / 9.0) * (tr.x - tl.x));
-            intersections[i][j].y = tl.y + (int)((i / 9.0) *
-                    (bl.y - tl.y)) + (int)((j / 9.0) * (tr.y - tl.y));
+    // Intersection points (i : row, j : column)
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            intersections[i][j].x = tl.x + (int)((i / 9.0) * (bl.x - tl.x)) + (int)((j / 9.0) * (tr.x - tl.x));
+            intersections[i][j].y = tl.y + (int)((i / 9.0) * (bl.y - tl.y)) + (int)((j / 9.0) * (tr.y - tl.y));
         }
     }
     
@@ -529,16 +527,38 @@ SDL_Surface* carve(SDL_Surface* source, SDL_Point intersections[][10])
 SDL_Surface* image(SDL_Surface* source, SDL_Point tl, SDL_Point tr,
                    SDL_Point bl, SDL_Point br)
 {
-    int minX = SDL_min(tl.x, SDL_min(tr.x, SDL_min(bl.x, br.x)));
-    int minY = SDL_min(tl.y, SDL_min(tr.y, SDL_min(bl.y, br.y)));
-    int maxX = SDL_max(tl.x, SDL_max(tr.x, SDL_max(bl.x, br.x)));
-    int maxY = SDL_max(tl.y, SDL_max(tr.y, SDL_max(bl.y, br.y)));
+    (void)br;  // On n'utilise pas br
+    
+    // Calculer la taille de cette cellule à partir des intersections
+    int cell_w = tr.x - tl.x;
+    int cell_h = bl.y - tl.y;
+    
+    // Offset de 5 pixels pour éviter les lignes de grille
+    int offset = 5;
+    
+    int left = tl.x + offset;
+    int top = tl.y + offset;
+    int width = cell_w - (2 * offset);
+    int height = cell_h - (2 * offset);
+    
+    // Clamp to image bounds
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    if (left + width > source->w) width = source->w - left;
+    if (top + height > source->h) height = source->h - top;
+    
+    if (width <= 0) width = 1;
+    if (height <= 0) height = 1;
+    
+    // Debug output
+    static int tile_count = 0;
+    printf("Tile %d: pos=(%d,%d) cell=%dx%d final=%dx%d\n", 
+           tile_count++, tl.x, tl.y, cell_w, cell_h, width, height);
 
-    SDL_Surface* tile = SDL_CreateRGBSurface(0, maxX - minX, maxY - minY,
-                                             32, 0, 0, 0, 0);
+    SDL_Surface* tile = SDL_CreateRGBSurface(0, width, height, 32, 0, 0, 0, 0);
 
-    SDL_Rect srect = { minX, minY, maxX - minX, maxY - minY };
-    SDL_Rect drect = { 0, 0, maxX - minX, maxY - minY };
+    SDL_Rect srect = { left, top, width, height };
+    SDL_Rect drect = { 0, 0, width, height };
     SDL_BlitSurface(source, &srect, tile, &drect);
 
     return tile;

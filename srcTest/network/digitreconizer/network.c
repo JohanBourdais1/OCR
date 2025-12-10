@@ -361,7 +361,7 @@ SDL_Surface* crop_image(SDL_Surface* image)
     int height = image->h;
     
     // Instead of cropping, fill borders with black to remove noise
-    int border = 10;  // 10 pixels border to paint white
+    int border = 2;  // 2 pixels border to paint white
     
     SDL_LockSurface(image);
     Uint32* pixels = (Uint32*)image->pixels;
@@ -447,7 +447,7 @@ int image_to_array_inverted(char* path, double** array)
     // Save original image for debug
     IMG_SavePNG(image, "debug/debug_original.png");
     
-    // Crop the image to remove white borders
+    //Crop the image to remove white borders
     SDL_Surface* cropped = crop_image(image);
     if (cropped != image) {
         SDL_FreeSurface(image);
@@ -702,82 +702,84 @@ int Test(network *n, char *path, int digit)
     }
 
     struct dirent* entry = NULL;
-    int res = 0;
-        while ((entry = readdir(directory)) != NULL) {
-            char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
-            snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
+    int correct = 0;
+    int total = 0;
+    
+    while ((entry = readdir(directory)) != NULL) {
+        char* full_name = calloc(MAX_FILE_NAME_SIZE, 1);
+        snprintf(full_name, MAX_FILE_NAME_SIZE, "%s/%s", path, entry->d_name);
 
-            if (entry->d_type == DT_DIR) {
-                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                    int result = Test(n, full_name, entry->d_name[0] - '0');
-                    switch (entry->d_name[0] - '0')
-                    {
-                        case 0:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 1:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 2:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 3:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 4:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 5:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 6:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 7:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 8:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                        case 9:
-                            printf("%d    prediction = %d/%d\n", entry->d_name[0] - '0', result, 1000);
-                            break;
-                    }
-                    
+        if (entry->d_type == DT_DIR) {
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                // Get the digit from folder name (first char if it's a digit)
+                int sub_digit = digit;
+                if (entry->d_name[0] >= '0' && entry->d_name[0] <= '9') {
+                    sub_digit = entry->d_name[0] - '0';
                 }
-                free(full_name);
-            } else {
-                if (!is_image_file(entry->d_name)) {
-                    free(full_name);
-                    continue;
+                
+                // Recursively test subdirectory
+                int result = Test(n, full_name, sub_digit);
+                if (result >= 0) {
+                    // Result contains correct count, we don't have total here
+                    // The subdirectory already printed its results
                 }
-                n->inputValues = create_Input(full_name);
-                double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
-                double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
-                apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
-                double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
-                apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
-                double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
-                dense_reLU(n, output_filter_2);
-                dense_logits(n);
-                dense_softmax(n);
-                int pred = 0;
-                for(int i=1;i<OUTPUT_SIZE;i++) 
-                {
-                    if(n->outputValues[i] > n->outputValues[pred]) pred = i;
-                }
-                if (digit == pred)
-                    res++;
-                free(output_filter_2);
-                free(full_name);
-                free(output_filter_1);
-                free(conv2_out);
-                free(conv1_out);
-                free(n->inputValues);
             }
+            free(full_name);
+        } else {
+            if (!is_image_file(entry->d_name)) {
+                free(full_name);
+                continue;
+            }
+            
+            // Get expected digit from filename (first character)
+            int expected = entry->d_name[0] - '0';
+            if (expected < 0 || expected > 9) {
+                expected = digit; // Fallback to folder digit
+            }
+            
+            n->inputValues = create_Input(full_name);
+            if (n->inputValues == NULL) {
+                free(full_name);
+                continue;
+            }
+            
+            double *conv1_out = calloc(NB_FILTER_1 * 26 * 26, sizeof(double));
+            double *conv2_out = calloc(NB_FILTER_2 * 11 * 11, sizeof(double));
+            apply_conv(SIZE, NB_FILTER_1, n->filter_1, n->inputValues, n->biais_1, conv1_out);
+            double* output_filter_1 = maxPool(conv1_out, 26, NB_FILTER_1);
+            apply_conv(13, NB_FILTER_2, n->filter_2, output_filter_1, n->biais_2, conv2_out);
+            double* output_filter_2 = maxPool(conv2_out, 11, NB_FILTER_2);
+            dense_reLU(n, output_filter_2);
+            dense_logits(n);
+            dense_softmax(n);
+            
+            int pred = 0;
+            for(int i = 1; i < OUTPUT_SIZE; i++) {
+                if(n->outputValues[i] > n->outputValues[pred]) pred = i;
+            }
+            
+            total++;
+            if (expected == pred) {
+                correct++;
+            }
+            
+            free(output_filter_2);
+            free(full_name);
+            free(output_filter_1);
+            free(conv2_out);
+            free(conv1_out);
+            free(n->inputValues);
         }
-        closedir(directory);
-    return res;
+    }
+    closedir(directory);
+    
+    // Print results for this directory if it contains images
+    if (total > 0) {
+        double accuracy = 100.0 * correct / total;
+        printf("%-50s: %4d/%4d correct (%.1f%%)\n", path, correct, total, accuracy);
+    }
+    
+    return correct;
 }
 
 // L2 regularization update
@@ -860,7 +862,7 @@ void create_grid(network *n, char *path)
 void train(network *n, char *path)
 {
     double lr = 0.0006f;  // Slightly reduced from 0.0007
-    int max_iterations = 100000;
+    int max_iterations = 200000;
     DIR* directory = opendir(path);
     if (directory == NULL) {
         fprintf(stderr, "Can't open %s\n", path);

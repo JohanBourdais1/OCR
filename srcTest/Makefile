@@ -60,3 +60,4 @@ clean:
 	rm -f sudoku_grid.txt
 	rm -f solver/sudoku_solution.txt
 	rm -f debug/*
+	rm -f cropped_image.png
