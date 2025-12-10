@@ -107,16 +107,13 @@ def generate_balanced_dataset(images_per_digit=20000, output_folder="train/"):
                 try:
                     font_name = os.path.basename(font_path)
                     
-                    # Define font sizes to distribute evenly
-                    font_sizes = list(range(50, 76))  # 50 to 75 (26 sizes)
-                    
                     for i in range(count_for_this_font):
                         # Create larger image then resize
-                        scale = 4  # Increased scale for better quality
-                        base_size = 28 * scale  # 112x112
+                        scale = 3
+                        base_size = 28 * scale  # 84x84
                         
-                        # Distribute font sizes evenly across all images for this font
-                        font_size = font_sizes[i % len(font_sizes)]
+                        # Vary font size more
+                        font_size = random.randint(50, 80)
                         
                         img = Image.new("L", (base_size, base_size), color=0)
                         draw = ImageDraw.Draw(img)
@@ -128,9 +125,9 @@ def generate_balanced_dataset(images_per_digit=20000, output_folder="train/"):
                         text_width = bbox[2] - bbox[0]
                         text_height = bbox[3] - bbox[1]
                         
-                        # Random offset for position variation
-                        offset_x = random.randint(-6, 6)
-                        offset_y = random.randint(-6, 6)
+                        # Larger random offset for more position variation
+                        offset_x = random.randint(-8, 8)
+                        offset_y = random.randint(-8, 8)
                         
                         x = (base_size - text_width) // 2 + offset_x
                         y = (base_size - text_height) // 2 + offset_y - bbox[1]
@@ -138,17 +135,15 @@ def generate_balanced_dataset(images_per_digit=20000, output_folder="train/"):
                         x = max(2, min(x, base_size - text_width - 2))
                         y = max(2, min(y, base_size - text_height - 2))
                         
-                        # Draw with slight thickening (5 positions: center + cross)
-                        for dx, dy in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)]:
-                            draw.text((x + dx, y + dy), text, fill=255, font=font)
+                        draw.text((x, y), text, fill=255, font=font)
                         
-                        # Resize with LANCZOS for smoother result
-                        img = img.resize((28, 28), Image.LANCZOS)
+                        # Resize with NEAREST (no antialiasing)
+                        img = img.resize((28, 28), Image.NEAREST)
                         
-                        # Threshold (80 = balanced thickness)
+                        # Threshold to pure black/white
                         import numpy as np
                         arr = np.array(img)
-                        arr = np.where(arr > 80, 255, 0).astype(np.uint8)
+                        arr = np.where(arr > 128, 255, 0).astype(np.uint8)
                         img = Image.fromarray(arr)
                         
                         unique_id = str(uuid.uuid4())[:8]
