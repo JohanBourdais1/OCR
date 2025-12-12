@@ -88,7 +88,7 @@ def generate_balanced_dataset(images_per_digit=20000, output_folder="train/"):
         # Special case: digit 0 = empty cell (all black)
         # Only generate 1000 images (they're all identical anyway)
         if digit == 0:
-            num_empty = 1000
+            num_empty = 10000
             for i in range(num_empty):
                 img = Image.new("L", (28, 28), color=0)  # Completely black
                 unique_id = str(uuid.uuid4())[:8]
@@ -184,6 +184,6 @@ if __name__ == "__main__":
     print()
     
     # Generate 20,000 images per digit for better 6/9 distinction
-    generate_balanced_dataset(images_per_digit=20000, output_folder="train/")
+    generate_balanced_dataset(images_per_digit=10000, output_folder="train/")
     
     print("\n✓ Dataset generation complete!")
